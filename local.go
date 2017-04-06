@@ -62,5 +62,6 @@ func relativePath(path string, filePath string) string {
 		return strings.TrimPrefix(filePath, "/")
 	} else {
 		return strings.TrimPrefix(strings.TrimPrefix(filePath, path), "/")
+
 	}
 }

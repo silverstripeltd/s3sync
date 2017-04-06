@@ -13,9 +13,8 @@ func loadS3Files(svc *s3.S3, bucket, path string, debug *log.Logger) chan map[st
 
 	out := make(chan map[string]*File)
 
-	if !strings.HasSuffix(path, "/") {
-		path = path + "/"
-	}
+	// s3 doesn't like the key to start with /
+	path = strings.TrimPrefix(path, "/")
 
 	go func() {
 		start := time.Now()
@@ -30,6 +29,7 @@ func loadS3Files(svc *s3.S3, bucket, path string, debug *log.Logger) chan map[st
 }
 
 func trawlS3(svc *s3.S3, path string, bucket, prefix string, files map[string]*File, token *string, debug *log.Logger) {
+	fmt.Println(bucket, prefix)
 	list, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{
 		Bucket:            aws.String(bucket),
 		Prefix:            aws.String(prefix),
