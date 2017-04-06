@@ -72,8 +72,15 @@ func main() {
 	if debug {
 		sess.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestErrors)
 	}
+
 	svc := s3.New(sess)
-	localFiles := loadLocalFiles(path, debugLogger)
+	localFiles, err := loadLocalFiles(path, debugLogger)
+	if err != nil {
+		flag.Usage()
+		fmt.Printf("\n%s\n", err)
+		os.Exit(1)
+	}
+
 	s3Files := loadS3Files(svc, bucket, bucketPath, debugLogger)
 
 	foundLocal := <-localFiles
@@ -163,10 +170,9 @@ func upload(svc *s3.S3, bucket, bucketPath, localPath string, file *File, debug 
 	// Create an uploader (can do multipart) with S3 client and default options
 	uploader := s3manager.NewUploaderWithClient(svc)
 	params := &s3manager.UploadInput{
-		Bucket: aws.String(bucket),
-		Key:    aws.String(key),
-		Body:   fileBody,
-		//ContentLength: aws.Int64(file.size),
+		Bucket:      aws.String(bucket),
+		Key:         aws.String(key),
+		Body:        fileBody,
 		ContentType: aws.String(fileType),
 	}
 

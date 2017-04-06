@@ -9,11 +9,16 @@ import (
 	"time"
 )
 
-func loadLocalFiles(path string, debug *log.Logger) chan map[string]*File {
+func loadLocalFiles(basePath string, debug *log.Logger) (chan map[string]*File, error) {
+
 	out := make(chan map[string]*File)
 
 	files := make(map[string]*File)
-	regulatedPath := filepath.ToSlash(path)
+	regulatedPath := filepath.ToSlash(basePath)
+
+	if err := checkPathIsDir(regulatedPath); err != nil {
+		return out, err
+	}
 
 	getFile := func(filePath string, info os.FileInfo, err error) error {
 		if info.IsDir() {
@@ -37,7 +42,7 @@ func loadLocalFiles(path string, debug *log.Logger) chan map[string]*File {
 	go func() {
 		start := time.Now()
 		debug.Printf("read local - start at %s", start)
-		err := filepath.Walk(path, getFile)
+		err := filepath.Walk(basePath, getFile)
 		debug.Printf("read local - end, it took %s", time.Now().Sub(start))
 		if err != nil {
 			fmt.Println(err)
@@ -46,15 +51,19 @@ func loadLocalFiles(path string, debug *log.Logger) chan map[string]*File {
 		close(out)
 	}()
 
-	return out
+	return out, nil
 }
 
-func pathExists(path string) bool {
-	_, err := os.Stat(path)
-	if err == nil {
-		return true
+// checkPathIsDir will check that path is an existing directory, will return an error otherwise
+func checkPathIsDir(path string) error {
+	finfo, err := os.Stat(path)
+	if err != nil {
+		return err
 	}
-	return false
+	if !finfo.IsDir() {
+		return fmt.Errorf("%s is not a directory", path)
+	}
+	return nil
 }
 
 func relativePath(path string, filePath string) string {
