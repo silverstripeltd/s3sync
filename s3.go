@@ -29,7 +29,6 @@ func loadS3Files(svc *s3.S3, bucket, path string, debug *log.Logger) chan map[st
 }
 
 func trawlS3(svc *s3.S3, path string, bucket, prefix string, files map[string]*File, token *string, debug *log.Logger) {
-	fmt.Println(bucket, prefix)
 	list, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{
 		Bucket:            aws.String(bucket),
 		Prefix:            aws.String(prefix),
@@ -44,6 +43,7 @@ func trawlS3(svc *s3.S3, path string, bucket, prefix string, files map[string]*F
 	for _, object := range list.Contents {
 		// strip out the full path of the object, begin after path
 		p := strings.TrimPrefix(*object.Key, path)
+		p = strings.TrimPrefix(p, "/")
 		files[p] = &File{
 			path:  p,
 			size:  *object.Size,

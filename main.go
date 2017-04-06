@@ -7,6 +7,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -77,6 +78,7 @@ func main() {
 
 	foundLocal := <-localFiles
 	debugLogger.Printf("found %d local files", len(foundLocal))
+
 	foundRemote := <-s3Files
 	debugLogger.Printf("found %d s3 files", len(foundRemote))
 
@@ -158,25 +160,36 @@ func upload(svc *s3.S3, bucket, bucketPath, localPath string, file *File, debug 
 	key := filepath.Join(bucketPath, file.path)
 	key = strings.TrimPrefix(key, "/")
 
-	params := &s3.PutObjectInput{
-		Bucket:        aws.String(bucket),
-		Key:           aws.String(key),
-		Body:          fileBody,
-		ContentLength: aws.Int64(file.size),
-		ContentType:   aws.String(fileType),
+	// Create an uploader (can do multipart) with S3 client and default options
+	uploader := s3manager.NewUploaderWithClient(svc)
+	params := &s3manager.UploadInput{
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+		Body:   fileBody,
+		//ContentLength: aws.Int64(file.size),
+		ContentType: aws.String(fileType),
 	}
 
-	url := filepath.Join(bucket, key)
+	//params := &s3.PutObjectInput{
+	//	Bucket:        aws.String(bucket),
+	//	Key:           aws.String(key),
+	//	Body:          fileBody,
+	//	ContentLength: aws.Int64(file.size),
+	//	ContentType:   aws.String(fileType),
+	//}
+
+	s3Uri := filepath.Join(bucket, key)
 	if !dryrun {
 		debug.Printf("start upload of %s\n", file.path)
-		_, err := svc.PutObject(params)
+		_, err := uploader.Upload(params)
+		//_, err := svc.PutObject(params)
 		if err != nil {
 			fmt.Printf("bad response: %+v", err)
 			return
 		}
-		fmt.Printf("upload: %s to s3://%s\n", file.path, url)
+		fmt.Printf("upload: %s to s3://%s\n", file.path, s3Uri)
 	} else {
-		fmt.Printf("(dryrun) upload: %s to s3://%s\n", file.path, url)
+		fmt.Printf("(dryrun) upload: %s to s3://%s\n", file.path, s3Uri)
 	}
 
 }
