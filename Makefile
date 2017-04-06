@@ -1,6 +1,6 @@
 VERSION=`git describe --tags`
 BUILDTIME=`date -u +%a,\ %d\ %b\ %Y\ %H:%M:%S\ GMT`
-BINARY=s3backup
+BINARY=s3sync
 
 all:
 	go build ${LDFLAGS} -o ${BINARY} .

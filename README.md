@@ -1,1 +1,1 @@
-# s3backup
+# s3sync
