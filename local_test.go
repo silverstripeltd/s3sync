@@ -9,7 +9,9 @@ import (
 func TestLoadAllLocalFiles(t *testing.T) {
 	buf := new(bytes.Buffer)
 	logger := log.New(buf, "[TEST] ", log.Lshortfile)
-	fileChan, err := loadLocalFiles("./_testdata", logger)
+
+	var exclude stringSlice
+	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -39,7 +41,8 @@ func TestLoadAllLocalFiles(t *testing.T) {
 func TestLoadSomeLocalFiles(t *testing.T) {
 	buf := new(bytes.Buffer)
 	logger := log.New(buf, "[TEST] ", log.Lshortfile)
-	fileChan, err := loadLocalFiles("./_testdata/dir_45", logger)
+	var exclude stringSlice
+	fileChan, err := loadLocalFiles("./_testdata/dir_45", exclude, logger)
 
 	if err != nil {
 		t.Errorf(err.Error())
@@ -59,7 +62,8 @@ func TestLoadSomeLocalFiles(t *testing.T) {
 func TestLoadNonExistingDirShouldFail(t *testing.T) {
 	buf := new(bytes.Buffer)
 	logger := log.New(buf, "[TEST] ", log.Lshortfile)
-	_, err := loadLocalFiles("./_testdata/XXX_SDASD", logger)
+	var exclude stringSlice
+	_, err := loadLocalFiles("./_testdata/XXX_SDASD", exclude, logger)
 	if err == nil {
 		t.Error("Expected an error")
 		return
@@ -73,7 +77,8 @@ func TestLoadNonExistingDirShouldFail(t *testing.T) {
 func TestLoadFileShouldFail(t *testing.T) {
 	buf := new(bytes.Buffer)
 	logger := log.New(buf, "[TEST] ", log.Lshortfile)
-	_, err := loadLocalFiles("./_testdata/file_33.html", logger)
+	var exclude stringSlice
+	_, err := loadLocalFiles("./_testdata/file_33.html", exclude, logger)
 	if err == nil {
 		t.Error("Expected an error")
 		return
@@ -81,5 +86,64 @@ func TestLoadFileShouldFail(t *testing.T) {
 	expected := "./_testdata/file_33.html is not a directory"
 	if err.Error() != expected {
 		t.Errorf("Expected error '%s', got '%s'", expected, err.Error())
+	}
+}
+
+func TestLoadFilesExcludeAll(t *testing.T) {
+	buf := new(bytes.Buffer)
+	logger := log.New(buf, "[TEST] ", log.Lshortfile)
+	exclude := stringSlice{"_testdata*"}
+	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
+	if err != nil {
+		t.Errorf("Did not expect error: %s", err)
+		return
+	}
+
+	files := <-fileChan
+	expected := 0
+	actual := len(files)
+	if actual != expected {
+		t.Errorf("wanted %d files, got %d files", expected, actual)
+		t.Errorf("%s\n", buf)
+	}
+}
+
+func TestLoadFilesExcludeHTML(t *testing.T) {
+	buf := new(bytes.Buffer)
+	logger := log.New(buf, "[TEST] ", log.Lshortfile)
+	exclude := stringSlice{"*.html"}
+	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
+	if err != nil {
+		t.Errorf("Did not expect error: %s", err)
+		return
+	}
+
+	files := <-fileChan
+
+	expected := 11
+	actual := len(files)
+	if actual != expected {
+		t.Errorf("wanted %d files, got %d files", expected, actual)
+		t.Errorf("%s\n", buf)
+	}
+}
+
+func TestLoadFilesExclude70(t *testing.T) {
+	buf := new(bytes.Buffer)
+	logger := log.New(buf, "[TEST] ", log.Lshortfile)
+	exclude := stringSlice{"*dir_45*"}
+	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
+	if err != nil {
+		t.Errorf("Did not expect error: %s", err)
+		return
+	}
+
+	files := <-fileChan
+
+	expected := 6
+	actual := len(files)
+	if actual != expected {
+		t.Errorf("wanted %d files, got %d files", expected, actual)
+		t.Errorf("%s\n", buf)
 	}
 }

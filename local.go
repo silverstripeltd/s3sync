@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func loadLocalFiles(basePath string, debug *log.Logger) (chan map[string]*File, error) {
+func loadLocalFiles(basePath string, exclude stringSlice, debug *log.Logger) (chan map[string]*File, error) {
 
 	out := make(chan map[string]*File)
 
@@ -24,6 +24,13 @@ func loadLocalFiles(basePath string, debug *log.Logger) (chan map[string]*File, 
 		if info.IsDir() {
 			return nil
 		}
+
+		for _, pattern := range exclude {
+			if globMatch(pattern, filePath) {
+				return nil
+			}
+		}
+
 		p := relativePath(regulatedPath, filepath.ToSlash(filePath))
 
 		stat, err := os.Stat(filePath)

@@ -20,15 +20,15 @@ import (
 var dryrun bool
 var quiet bool
 var debug bool
+var exclude stringSlice
 
 func init() {
 	flag.BoolVar(&dryrun, "dryrun", false, "Displays the operations that would be performed using the specified command without actually running them.")
 	flag.BoolVar(&quiet, "quiet", false, "Does not display the operations performed from the specified command")
 	flag.BoolVar(&debug, "debug", false, "Turn on debug logging")
-
+	flag.Var(&exclude, "exclude", "Exclude all files or objects from the command that matches the specified pattern, only supports '*' globbing")
 }
 
-// @todo, ignore files beginning with .
 func main() {
 
 	flag.Parse()
@@ -38,7 +38,6 @@ func main() {
 		debugLogger.SetOutput(ioutil.Discard)
 	}
 
-	// @todo, check that localPath exists and is readable
 	path, err := filepath.Abs(flag.Arg(0))
 	if err != nil {
 		flag.Usage()
@@ -70,11 +69,11 @@ func main() {
 	os.Setenv("AWS_SDK_LOAD_CONFIG", "true")
 	sess := session.Must(session.NewSession())
 	if debug {
-		sess.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestErrors)
+		//sess.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestErrors)
 	}
 
 	svc := s3.New(sess)
-	localFiles, err := loadLocalFiles(path, debugLogger)
+	localFiles, err := loadLocalFiles(path, exclude, debugLogger)
 	if err != nil {
 		flag.Usage()
 		fmt.Printf("\n%s\n", err)
@@ -91,7 +90,6 @@ func main() {
 
 	files := compare(foundLocal, foundRemote, debugLogger)
 	syncFiles(svc, bucket, bucketPath, path, files, debugLogger)
-
 }
 
 /**
@@ -197,5 +195,20 @@ func upload(svc *s3.S3, bucket, bucketPath, localPath string, file *File, debug 
 	} else {
 		fmt.Printf("(dryrun) upload: %s to s3://%s\n", file.path, s3Uri)
 	}
+}
 
+type stringSlice []string
+
+// String is the method to format the flag's value, part of the flag.Value interface.
+// The String method's output will be used in diagnostics.
+func (e *stringSlice) String() string {
+	return fmt.Sprint(*e)
+}
+
+// Set is the method to set the flag value, part of the flag.Value interface.
+// Set's argument is a string to be parsed to set the flag.
+// It's a comma-separated list, so we split it.
+func (i *stringSlice) Set(value string) error {
+	*i = append(*i, value)
+	return nil
 }
