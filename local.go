@@ -2,14 +2,13 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
 
-func loadLocalFiles(basePath string, exclude stringSlice, debug *log.Logger) (chan LocalFileResult, error) {
+func loadLocalFiles(basePath string, exclude stringSlice, logger *Logger) (chan LocalFileResult, error) {
 
 	out := make(chan LocalFileResult)
 
@@ -51,11 +50,11 @@ func loadLocalFiles(basePath string, exclude stringSlice, debug *log.Logger) (ch
 	go func() {
 
 		start := time.Now()
-		debug.Printf("read local - start at %s", start)
+		logger.Debug.Printf("read local - start at %s", start)
 		if err := filepath.Walk(basePath, getFile); err != nil {
-			fmt.Println(err)
+			logger.Err.Println(err)
 		}
-		debug.Printf("read local - end, it took %s", time.Now().Sub(start))
+		logger.Debug.Printf("read local - end, it took %s", time.Now().Sub(start))
 		close(out)
 	}()
 

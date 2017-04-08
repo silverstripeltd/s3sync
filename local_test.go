@@ -7,8 +7,7 @@ import (
 )
 
 func TestLoadAllLocalFiles(t *testing.T) {
-	buf := new(bytes.Buffer)
-	logger := log.New(buf, "[TEST] ", log.Lshortfile)
+	logger, buf := getTestLogger()
 
 	var exclude stringSlice
 	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
@@ -43,8 +42,7 @@ func TestLoadAllLocalFiles(t *testing.T) {
 }
 
 func TestLoadSomeLocalFiles(t *testing.T) {
-	buf := new(bytes.Buffer)
-	logger := log.New(buf, "[TEST] ", log.Lshortfile)
+	logger, buf := getTestLogger()
 	var exclude stringSlice
 	fileChan, err := loadLocalFiles("./_testdata/dir_45", exclude, logger)
 
@@ -68,8 +66,7 @@ func TestLoadSomeLocalFiles(t *testing.T) {
 }
 
 func TestLoadNonExistingDirShouldFail(t *testing.T) {
-	buf := new(bytes.Buffer)
-	logger := log.New(buf, "[TEST] ", log.Lshortfile)
+	logger, _ := getTestLogger()
 	var exclude stringSlice
 	_, err := loadLocalFiles("./_testdata/XXX_SDASD", exclude, logger)
 	if err == nil {
@@ -83,8 +80,7 @@ func TestLoadNonExistingDirShouldFail(t *testing.T) {
 }
 
 func TestLoadFileShouldFail(t *testing.T) {
-	buf := new(bytes.Buffer)
-	logger := log.New(buf, "[TEST] ", log.Lshortfile)
+	logger, _ := getTestLogger()
 	var exclude stringSlice
 	_, err := loadLocalFiles("./_testdata/file_33.html", exclude, logger)
 	if err == nil {
@@ -98,8 +94,7 @@ func TestLoadFileShouldFail(t *testing.T) {
 }
 
 func TestLoadFilesExcludeAll(t *testing.T) {
-	buf := new(bytes.Buffer)
-	logger := log.New(buf, "[TEST] ", log.Lshortfile)
+	logger, buf := getTestLogger()
 	exclude := stringSlice{"_testdata*"}
 	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
 	if err != nil {
@@ -122,8 +117,7 @@ func TestLoadFilesExcludeAll(t *testing.T) {
 }
 
 func TestLoadFilesExcludeHTML(t *testing.T) {
-	buf := new(bytes.Buffer)
-	logger := log.New(buf, "[TEST] ", log.Lshortfile)
+	logger, buf := getTestLogger()
 	exclude := stringSlice{"*.html"}
 	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
 	if err != nil {
@@ -146,8 +140,7 @@ func TestLoadFilesExcludeHTML(t *testing.T) {
 }
 
 func TestLoadFilesExclude70(t *testing.T) {
-	buf := new(bytes.Buffer)
-	logger := log.New(buf, "[TEST] ", log.Lshortfile)
+	logger, buf := getTestLogger()
 	exclude := stringSlice{"*dir_45*"}
 	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
 	if err != nil {
@@ -178,4 +171,13 @@ func sink(in chan LocalFileResult) (map[string]*File, error) {
 		out[f.file.path] = f.file
 	}
 	return out, nil
+}
+
+func getTestLogger() (*Logger, *bytes.Buffer) {
+	buf := new(bytes.Buffer)
+	return &Logger{
+		Out:   log.New(buf, "[Out] ", log.Lshortfile),
+		Err:   log.New(buf, "[Err] ", log.Lshortfile),
+		Debug: log.New(buf, "[DEBUG] ", log.Lshortfile),
+	}, buf
 }
