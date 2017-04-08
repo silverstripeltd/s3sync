@@ -9,26 +9,32 @@ import (
 	"time"
 )
 
-func loadS3Files(svc *s3.S3, bucket, path string, debug *log.Logger) chan map[string]*File {
-
-	out := make(chan map[string]*File)
+func loadS3Files(svc *s3.S3, bucket, path string, buffer int, debug *log.Logger) (chan LocalFileResult, error) {
+	out := make(chan LocalFileResult, buffer)
 
 	// s3 doesn't like the key to start with /
 	path = strings.TrimPrefix(path, "/")
 
+	// initial check if we can read this bucket with prefix
+	_, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{
+		Bucket: aws.String(bucket),
+		Prefix: aws.String(path),
+	})
+	if err != nil {
+		return out, fmt.Errorf("Could not s3:listObjects on 's3://%s/%s':\n%s", bucket, path, err)
+	}
+
 	go func() {
 		start := time.Now()
 		debug.Printf("read s3 - start at %s", start)
-		f := make(map[string]*File)
-		trawlS3(svc, path, bucket, path, f, nil, debug)
+		trawlS3(svc, path, bucket, path, out, nil, debug)
 		debug.Printf("read s3 - stop, it took %s", time.Now().Sub(start))
-		out <- f
 		close(out)
 	}()
-	return out
+	return out, nil
 }
 
-func trawlS3(svc *s3.S3, path string, bucket, prefix string, files map[string]*File, token *string, debug *log.Logger) {
+func trawlS3(svc *s3.S3, path string, bucket, prefix string, out chan LocalFileResult, token *string, debug *log.Logger) {
 	list, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{
 		Bucket:            aws.String(bucket),
 		Prefix:            aws.String(prefix),
@@ -36,7 +42,9 @@ func trawlS3(svc *s3.S3, path string, bucket, prefix string, files map[string]*F
 	})
 
 	if err != nil {
-		fmt.Println(err)
+		out <- LocalFileResult{
+			err: err,
+		}
 		return
 	}
 
@@ -44,14 +52,16 @@ func trawlS3(svc *s3.S3, path string, bucket, prefix string, files map[string]*F
 		// strip out the full path of the object, begin after path
 		p := strings.TrimPrefix(*object.Key, path)
 		p = strings.TrimPrefix(p, "/")
-		files[p] = &File{
-			path:  p,
-			size:  *object.Size,
-			mtime: *object.LastModified,
+		out <- LocalFileResult{
+			file: &File{
+				path:  p,
+				size:  *object.Size,
+				mtime: *object.LastModified,
+			},
 		}
 	}
 
 	if *list.IsTruncated {
-		trawlS3(svc, path, bucket, prefix, files, list.NextContinuationToken, debug)
+		trawlS3(svc, path, bucket, prefix, out, list.NextContinuationToken, debug)
 	}
 }

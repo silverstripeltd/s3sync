@@ -18,13 +18,11 @@ import (
 )
 
 var dryrun bool
-var quiet bool
 var debug bool
 var exclude stringSlice
 
 func init() {
 	flag.BoolVar(&dryrun, "dryrun", false, "Displays the operations that would be performed using the specified command without actually running them.")
-	flag.BoolVar(&quiet, "quiet", false, "Does not display the operations performed from the specified command")
 	flag.BoolVar(&debug, "debug", false, "Turn on debug logging")
 	flag.Var(&exclude, "exclude", "Exclude all files or objects from the command that matches the specified pattern, only supports '*' globbing")
 }
@@ -73,52 +71,84 @@ func main() {
 	}
 
 	svc := s3.New(sess)
-	localFiles, err := loadLocalFiles(path, exclude, debugLogger)
+	local, err := loadLocalFiles(path, exclude, debugLogger)
 	if err != nil {
 		flag.Usage()
 		fmt.Printf("\n%s\n", err)
+		// stop goroutines
 		os.Exit(1)
 	}
 
-	s3Files := loadS3Files(svc, bucket, bucketPath, debugLogger)
+	// we keep 50,000 (50 s3:listObjects calls) to be in the output remote channel,
+	// this will ensure that we can find all local files without blocking the AWS calls
+	remote, err := loadS3Files(svc, bucket, bucketPath, 50000, debugLogger)
+	if err != nil {
+		flag.Usage()
+		fmt.Printf("\n%s\n", err)
+		// stop goroutines
+		os.Exit(1)
+	}
 
-	foundLocal := <-localFiles
-	debugLogger.Printf("found %d local files", len(foundLocal))
-
-	foundRemote := <-s3Files
-	debugLogger.Printf("found %d s3 files", len(foundRemote))
-
-	files := compare(foundLocal, foundRemote, debugLogger)
+	files := compare(local, remote, debugLogger)
 	syncFiles(svc, bucket, bucketPath, path, files, debugLogger)
 }
 
-/**
- this is the A local file will require uploading if:
-- the size of the local file is different than the size of the s3 object
-- the last modified time of the local file is newer than the last modified time of the s3 object
-- the local file does not exist under the specified bucket and prefix.
-
-see https://github.com/aws/aws-cli/blob/e2295b022db35eea9fec7e6c5540d06dbd6e588b/awscli/customizations/s3/syncstrategy/base.py#L226
-*/
-func compare(foundLocal, foundRemote map[string]*File, debug *log.Logger) chan *File {
+// compare will put a local file on the output channel if:
+// - the size of the local file is different than the size of the s3 object
+// - the last modified time of the local file is newer than the last modified time of the s3 object
+// - the local file does not exist under the specified bucket and prefix.
+// This is the same logic as the aws s3 sync tool uses, see https://github.com/aws/aws-cli/blob/e2295b022db35eea9fec7e6c5540d06dbd6e588b/awscli/customizations/s3/syncstrategy/base.py#L226
+func compare(foundLocal, foundRemote chan LocalFileResult, debug *log.Logger) chan *File {
 
 	update := make(chan *File, 8)
 
+	// first we sink the local files into a lookup map so its quick and easy to compare that to the remote
+	localFiles := make(map[string]*File)
+	for r := range foundLocal {
+		if r.err != nil {
+			fmt.Println(r.err)
+			continue
+		}
+		localFiles[r.file.path] = r.file
+	}
+
+	numLocalFiles := len(localFiles)
+	var numRemoteFiles int
+
 	go func() {
-		for path, local := range foundLocal {
-			remote := foundRemote[path]
-			if remote == nil {
-				debug.Printf("syncing: %s, file does not exist at destination\n", path)
+		for remote := range foundRemote {
+			numRemoteFiles++
+			if remote.err != nil {
+				fmt.Println(remote.err)
+				continue
+			}
+
+			// see if there is a local file that matches the remote file
+			var local *File
+			var ok bool
+			// check if the remote have a local representation
+			if local, ok = localFiles[remote.file.path]; !ok {
+				continue
+			}
+			// we "handled" this local file now
+			delete(localFiles, remote.file.path)
+			// check if we need to update this file
+			if local.size != remote.file.size {
+				debug.Printf("syncing: %s, size %d -> %d\n", local.path, local.size, remote.file.size)
 				update <- local
-			} else if local.size != remote.size {
-				debug.Printf("syncing: %s, size %d -> %d\n", path, local.size, remote.size)
-				update <- local
-			} else if local.mtime.After(remote.mtime) {
-				debug.Printf("syncing: %s, modified time: %s -> %s\n", path, local.mtime, remote.mtime.In(local.mtime.Location()))
+			} else if local.mtime.After(remote.file.mtime) {
+				debug.Printf("syncing: %s, modified time: %s -> %s\n", local.path, local.mtime, remote.file.mtime.In(local.mtime.Location()))
 				update <- local
 			}
 		}
+		// now we check the left-overs in the local file that hasn't been handled since they dont exist on the remote
+		for _, local := range localFiles {
+			debug.Printf("syncing: %s, file does not exist at destination\n", local.path)
+			update <- local
+		}
 		close(update)
+		debug.Printf("Found %d local files\n", numLocalFiles)
+		debug.Printf("Found %d remote files\n", numRemoteFiles)
 	}()
 	return update
 }
@@ -127,8 +157,10 @@ func syncFiles(svc *s3.S3, bucket, bucketPath, localPath string, in chan *File, 
 
 	concurrency := 5
 	sem := make(chan bool, concurrency)
+	var numSyncedFiles int
 
 	for file := range in {
+		numSyncedFiles++
 		// add one
 		sem <- true
 		go func(svc *s3.S3, bucket, bucketPath, localPath string, file *File, debug *log.Logger) {
@@ -145,6 +177,8 @@ func syncFiles(svc *s3.S3, bucket, bucketPath, localPath string, in chan *File, 
 	for i := 0; i < cap(sem); i++ {
 		sem <- true
 	}
+
+	debug.Printf("Synced %d local files to remote\n", numSyncedFiles)
 }
 
 func upload(svc *s3.S3, bucket, bucketPath, localPath string, file *File, debug *log.Logger) {
@@ -159,8 +193,6 @@ func upload(svc *s3.S3, bucket, bucketPath, localPath string, file *File, debug 
 	// create a byte buffer reader for the content of the local file
 	buffer := make([]byte, file.size)
 	realFile.Read(buffer)
-	fileBody := bytes.NewReader(buffer)
-	fileType := http.DetectContentType(buffer)
 
 	key := filepath.Join(bucketPath, file.path)
 	key = strings.TrimPrefix(key, "/")
@@ -170,23 +202,13 @@ func upload(svc *s3.S3, bucket, bucketPath, localPath string, file *File, debug 
 	params := &s3manager.UploadInput{
 		Bucket:      aws.String(bucket),
 		Key:         aws.String(key),
-		Body:        fileBody,
-		ContentType: aws.String(fileType),
+		Body:        bytes.NewReader(buffer),
+		ContentType: aws.String(http.DetectContentType(buffer)),
 	}
-
-	//params := &s3.PutObjectInput{
-	//	Bucket:        aws.String(bucket),
-	//	Key:           aws.String(key),
-	//	Body:          fileBody,
-	//	ContentLength: aws.Int64(file.size),
-	//	ContentType:   aws.String(fileType),
-	//}
 
 	s3Uri := filepath.Join(bucket, key)
 	if !dryrun {
-		debug.Printf("start upload of %s\n", file.path)
 		_, err := uploader.Upload(params)
-		//_, err := svc.PutObject(params)
 		if err != nil {
 			fmt.Printf("bad response: %+v", err)
 			return

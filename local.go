@@ -9,17 +9,17 @@ import (
 	"time"
 )
 
-func loadLocalFiles(basePath string, exclude stringSlice, debug *log.Logger) (chan map[string]*File, error) {
+func loadLocalFiles(basePath string, exclude stringSlice, debug *log.Logger) (chan LocalFileResult, error) {
 
-	out := make(chan map[string]*File)
+	out := make(chan LocalFileResult)
 
-	files := make(map[string]*File)
 	regulatedPath := filepath.ToSlash(basePath)
 
 	if err := checkPathIsDir(regulatedPath); err != nil {
 		return out, err
 	}
 
+	//files := make(map[string]*File)
 	getFile := func(filePath string, info os.FileInfo, err error) error {
 		if info.IsDir() {
 			return nil
@@ -38,23 +38,24 @@ func loadLocalFiles(basePath string, exclude stringSlice, debug *log.Logger) (ch
 			return err
 		}
 
-		files[p] = &File{
-			path:  p,
-			mtime: stat.ModTime(),
-			size:  stat.Size(),
+		out <- LocalFileResult{
+			file: &File{
+				path:  p,
+				mtime: stat.ModTime(),
+				size:  stat.Size(),
+			},
 		}
 		return nil
 	}
 
 	go func() {
+
 		start := time.Now()
 		debug.Printf("read local - start at %s", start)
-		err := filepath.Walk(basePath, getFile)
-		debug.Printf("read local - end, it took %s", time.Now().Sub(start))
-		if err != nil {
+		if err := filepath.Walk(basePath, getFile); err != nil {
 			fmt.Println(err)
 		}
-		out <- files
+		debug.Printf("read local - end, it took %s", time.Now().Sub(start))
 		close(out)
 	}()
 

@@ -13,11 +13,15 @@ func TestLoadAllLocalFiles(t *testing.T) {
 	var exclude stringSlice
 	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err)
 		return
 	}
 
-	files := <-fileChan
+	files, err := sink(fileChan)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 
 	expected := 19
 	actual := len(files)
@@ -45,11 +49,15 @@ func TestLoadSomeLocalFiles(t *testing.T) {
 	fileChan, err := loadLocalFiles("./_testdata/dir_45", exclude, logger)
 
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Error(err)
 		return
 	}
 
-	files := <-fileChan
+	files, err := sink(fileChan)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 
 	expected := 13
 	actual := len(files)
@@ -99,7 +107,12 @@ func TestLoadFilesExcludeAll(t *testing.T) {
 		return
 	}
 
-	files := <-fileChan
+	files, err := sink(fileChan)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
 	expected := 0
 	actual := len(files)
 	if actual != expected {
@@ -118,7 +131,11 @@ func TestLoadFilesExcludeHTML(t *testing.T) {
 		return
 	}
 
-	files := <-fileChan
+	files, err := sink(fileChan)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 
 	expected := 11
 	actual := len(files)
@@ -138,7 +155,11 @@ func TestLoadFilesExclude70(t *testing.T) {
 		return
 	}
 
-	files := <-fileChan
+	files, err := sink(fileChan)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 
 	expected := 6
 	actual := len(files)
@@ -146,4 +167,15 @@ func TestLoadFilesExclude70(t *testing.T) {
 		t.Errorf("wanted %d files, got %d files", expected, actual)
 		t.Errorf("%s\n", buf)
 	}
+}
+
+func sink(in chan LocalFileResult) (map[string]*File, error) {
+	out := make(map[string]*File)
+	for f := range in {
+		if f.err != nil {
+			return out, f.err
+		}
+		out[f.file.path] = f.file
+	}
+	return out, nil
 }
