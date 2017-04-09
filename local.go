@@ -18,7 +18,6 @@ func loadLocalFiles(basePath string, exclude stringSlice, logger *Logger) (chan 
 		return out, err
 	}
 
-	//files := make(map[string]*File)
 	getFile := func(filePath string, info os.FileInfo, err error) error {
 		if info.IsDir() {
 			return nil
@@ -26,6 +25,7 @@ func loadLocalFiles(basePath string, exclude stringSlice, logger *Logger) (chan 
 
 		for _, pattern := range exclude {
 			if globMatch(pattern, filePath) {
+				logger.Debug.Printf("excluding %s\n", filePath)
 				return nil
 			}
 		}
