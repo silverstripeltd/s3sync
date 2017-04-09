@@ -5,6 +5,8 @@ import (
 	"flag"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/client"
+	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
@@ -21,12 +23,16 @@ var dryrun bool
 var debug bool
 var onlyShowErrors bool
 var exclude stringSlice
+var region string
+var profile string
 
 func init() {
 	flag.BoolVar(&dryrun, "dryrun", false, "Displays the operations that would be performed using the specified command without actually running them.")
-	flag.BoolVar(&debug, "debug", false, "Turn on debug logging")
-	flag.BoolVar(&onlyShowErrors, "only-show-errors", false, "Only errors and  warnings  are  displayed. All other output is suppressed.")
-	flag.Var(&exclude, "exclude", "Exclude all files or objects from the command that matches the specified pattern, only supports '*' globbing")
+	flag.BoolVar(&debug, "debug", false, "Turn on debug logging.")
+	flag.BoolVar(&onlyShowErrors, "only-show-errors", false, "Only errors and warnings are displayed. All other output is suppressed.")
+	flag.Var(&exclude, "exclude", "Exclude all files or objects from the command that matches the specified pattern, only supports '*' globbing.")
+	flag.StringVar(&region, "region", "", "The region to use. Overrides config/env settings.")
+	flag.StringVar(&profile, "profile", "", "Use a specific profile from your credential file.")
 }
 
 type Logger struct {
@@ -82,11 +88,7 @@ func main() {
 	bucket := t.Host
 	bucketPath := t.Path
 
-	os.Setenv("AWS_SDK_LOAD_CONFIG", "true")
-	sess := session.Must(session.NewSession())
-	if debug {
-		//sess.Config.LogLevel = aws.LogLevel(aws.LogDebugWithRequestErrors)
-	}
+	sess := session.Must(getSession(profile, region, logger))
 
 	svc := s3.New(sess)
 	local, err := loadLocalFiles(path, exclude, logger)
@@ -233,6 +235,54 @@ func upload(svc *s3.S3, bucket, bucketPath, localPath string, file *File, logger
 	} else {
 		logger.Out.Printf("(dryrun) upload: %s to s3://%s\n", file.path, s3Uri)
 	}
+}
+
+func getSession(profile, region string, logger *Logger) (*session.Session, error) {
+	options := session.Options{
+		SharedConfigState: session.SharedConfigEnable,
+	}
+	if profile != "" {
+		logger.Debug.Printf("Using credentials profile: %s\n", profile)
+		options.Profile = profile
+	}
+	sess, err := session.NewSessionWithOptions(options)
+	if err != nil {
+		return sess, err
+	}
+	sess.Config.Region = aws.String(getRegion(sess, region, logger))
+	return sess, nil
+}
+
+func getRegion(p client.ConfigProvider, region string, logger *Logger) string {
+
+	if region != "" {
+		logger.Debug.Printf("Found region in CLI options: %s\n", region)
+		return region
+	}
+
+	if os.Getenv("AWS_REGION") != "" {
+		logger.Debug.Printf("Found region in ENV: %s\n", os.Getenv("AWS_REGION"))
+		return os.Getenv("AWS_REGION")
+	}
+
+	cc := p.ClientConfig("s3")
+	if *cc.Config.Region != "" {
+		logger.Debug.Printf("Found region in client config: %s\n", *cc.Config.Region)
+		return *cc.Config.Region
+	}
+
+	// check if running inside EC2, then grab the region from the EC2 metadata service
+	md := ec2metadata.New(p)
+	if md.Available() {
+		reg, err := md.Region()
+		if err != nil {
+			logger.Err.Println(err)
+		} else {
+			logger.Debug.Printf("Found region in AWS EC2 metadata: %s\n", reg)
+			return reg
+		}
+	}
+	return ""
 }
 
 type stringSlice []string

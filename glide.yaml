@@ -1,4 +1,4 @@
-package: github.com/stojg/s3backup
+package: github.com/silverstripeltd/s3sync
 import:
 - package: github.com/aws/aws-sdk-go
   version: ^1.8.10
