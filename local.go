@@ -19,15 +19,19 @@ func loadLocalFiles(basePath string, exclude stringSlice, logger *Logger) (chan 
 	}
 
 	getFile := func(filePath string, info os.FileInfo, err error) error {
-		if info.IsDir() {
-			return nil
-		}
 
 		for _, pattern := range exclude {
 			if globMatch(pattern, filePath) {
 				logger.Debug.Printf("excluding %s\n", filePath)
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
 				return nil
 			}
+		}
+
+		if info.IsDir() {
+			return nil
 		}
 
 		p := relativePath(regulatedPath, filepath.ToSlash(filePath))
