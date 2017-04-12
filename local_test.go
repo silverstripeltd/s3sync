@@ -44,22 +44,21 @@ func TestLoadAllLocalFiles(t *testing.T) {
 func BenchmarkLoadAllLocalFiles(b *testing.B) {
 	logger, _ := getTestLogger()
 
-
 	var exclude stringSlice
 
 	for i := 0; i < b.N; i++ {
 
-	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
-	if err != nil {
-		b.Error(err)
-		return
-	}
+		fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
+		if err != nil {
+			b.Error(err)
+			return
+		}
 
-	_, err = sink(fileChan)
-	if err != nil {
-		b.Error(err)
-		return
-	}
+		_, err = sink(fileChan)
+		if err != nil {
+			b.Error(err)
+			return
+		}
 	}
 
 }
