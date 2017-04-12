@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	"bufio"
 	"flag"
 	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
@@ -12,7 +12,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -199,29 +198,30 @@ func syncFiles(svc *s3.S3, bucket, bucketPath, localPath string, in chan *File, 
 	logger.Debug.Printf("Synced %d local files to remote\n", numSyncedFiles)
 }
 
-func upload(svc *s3.S3, bucket, bucketPath, localPath string, file *File, logger *Logger) {
+func upload(svc *s3.S3, bucket, bucketPath, localPath string, fileData *File, logger *Logger) {
 
-	realFile, err := os.Open(filepath.Join(localPath, file.path))
+	realFilePath := filepath.Join(localPath, fileData.path)
+	realFile, err := os.Open(realFilePath)
 	if err != nil {
 		logger.Err.Printf("error opening file: %s\n", err)
 		return
 	}
-	defer realFile.Close()
+	defer func() {
+		err := realFile.Close()
+		if err != nil {
+			logger.Err.Printf("Problem closing file %s: %v", realFilePath, err)
+		}
+	}()
 
-	// create a byte buffer reader for the content of the local file
-	buffer := make([]byte, file.size)
-	realFile.Read(buffer)
-
-	key := filepath.Join(bucketPath, file.path)
+	key := filepath.Join(bucketPath, fileData.path)
 	key = strings.TrimPrefix(key, "/")
 
 	// Create an uploader (can do multipart) with S3 client and default options
 	uploader := s3manager.NewUploaderWithClient(svc)
 	params := &s3manager.UploadInput{
-		Bucket:      aws.String(bucket),
-		Key:         aws.String(key),
-		Body:        bytes.NewReader(buffer),
-		ContentType: aws.String(http.DetectContentType(buffer)),
+		Bucket: aws.String(bucket),
+		Key:    aws.String(key),
+		Body:   bufio.NewReader(realFile),
 	}
 
 	s3Uri := filepath.Join(bucket, key)
@@ -231,9 +231,9 @@ func upload(svc *s3.S3, bucket, bucketPath, localPath string, file *File, logger
 			logger.Out.Printf("bad response: %+v", err)
 			return
 		}
-		logger.Out.Printf("upload: %s to s3://%s\n", file.path, s3Uri)
+		logger.Out.Printf("upload: %s to s3://%s\n", fileData.path, s3Uri)
 	} else {
-		logger.Out.Printf("(dryrun) upload: %s to s3://%s\n", file.path, s3Uri)
+		logger.Out.Printf("(dryrun) upload: %s to s3://%s\n", fileData.path, s3Uri)
 	}
 }
 
