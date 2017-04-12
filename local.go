@@ -75,8 +75,6 @@ func checkPathIsDir(path string) error {
 func relativePath(path string, filePath string) string {
 	if path == "." {
 		return strings.TrimPrefix(filePath, "/")
-	} else {
-		return strings.TrimPrefix(strings.TrimPrefix(filePath, path), "/")
-
 	}
+	return strings.TrimPrefix(strings.TrimPrefix(filePath, path), "/")
 }

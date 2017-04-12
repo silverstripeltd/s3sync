@@ -289,14 +289,14 @@ type stringSlice []string
 
 // String is the method to format the flag's value, part of the flag.Value interface.
 // The String method's output will be used in diagnostics.
-func (e *stringSlice) String() string {
-	return fmt.Sprint(*e)
+func (s *stringSlice) String() string {
+	return fmt.Sprint(*s)
 }
 
 // Set is the method to set the flag value, part of the flag.Value interface.
 // Set's argument is a string to be parsed to set the flag.
 // It's a comma-separated list, so we split it.
-func (i *stringSlice) Set(value string) error {
-	*i = append(*i, value)
+func (s *stringSlice) Set(value string) error {
+	*s = append(*s, value)
 	return nil
 }
