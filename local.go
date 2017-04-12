@@ -53,7 +53,7 @@ func loadLocalFiles(basePath string, exclude stringSlice, logger *Logger) (chan 
 		if err := filepath.Walk(basePath, getFile); err != nil {
 			logger.Err.Println(err)
 		}
-		logger.Debug.Printf("read local - end, it took %s", time.Now().Sub(start))
+		logger.Debug.Printf("read local - end, it took %s", time.Since(start))
 		close(out)
 	}()
 

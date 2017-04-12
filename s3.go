@@ -27,7 +27,7 @@ func loadS3Files(svc *s3.S3, bucket, path string, buffer int, logger *Logger) (c
 		start := time.Now()
 		logger.Debug.Printf("read s3 - start at %s", start)
 		trawlS3(svc, path, bucket, path, out, nil, logger)
-		logger.Debug.Printf("read s3 - stop, it took %s", time.Now().Sub(start))
+		logger.Debug.Printf("read s3 - stop, it took %s", time.Since(start))
 		close(out)
 	}()
 	return out, nil
