@@ -10,17 +10,9 @@ func TestLoadAllLocalFiles(t *testing.T) {
 	logger, buf := getTestLogger()
 
 	var exclude StringSlice
-	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	fileChan := loadLocalFiles("./_testdata", exclude, logger)
 
-	files, err := sink(fileChan)
-	if err != nil {
-		t.Error(err)
-		return
-	}
+	files := sink(fileChan)
 
 	expected := 19
 	actual := len(files)
@@ -36,6 +28,16 @@ func TestLoadAllLocalFiles(t *testing.T) {
 		return
 	}
 
+	if file.Err != nil {
+		t.Errorf("Expected file.Err to be nil, got %v\n", file.Err)
+	}
+	if file.Path != filename {
+		t.Errorf("Expected file.Path to be %s, got %s\n", filename, file.Path)
+	}
+	if file.Size != 34 {
+		t.Errorf("Expected file.Path to be %d, got %d\n", 34, file.Size)
+	}
+
 	if file.Path != filename {
 		t.Errorf("expected file.path ('%s') to be the same as the key ('%s') of the map", file.Path, filename)
 	}
@@ -43,156 +45,66 @@ func TestLoadAllLocalFiles(t *testing.T) {
 
 func BenchmarkLoadAllLocalFiles(b *testing.B) {
 	logger, _ := getTestLogger()
-
 	var exclude StringSlice
-
 	for i := 0; i < b.N; i++ {
+		loadLocalFiles("./_testdata", exclude, logger)
+	}
+}
 
-		fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
-		if err != nil {
-			b.Error(err)
-			return
+func TestLoadSingleFile(t *testing.T) {
+	logger, buf := getTestLogger()
+	fileChan := loadLocalFiles("./_testdata/file_33.html", StringSlice{}, logger)
+	files := sink(fileChan)
+	if len(files) != 1 {
+		t.Errorf("wanted %d files, got %d files", 1, len(files))
+		t.Errorf("%s\n", buf)
+	}
+
+	filename := "./_testdata/file_33.html"
+	_, ok := files[filename]
+	if !ok {
+		t.Errorf("Couldn't find file '%s' in file list", filename)
+		t.Errorf("%+v", files)
+		return
+	}
+}
+
+func TestLoadFiles(t *testing.T) {
+	tests := []struct {
+		in      string
+		out     int
+		exclude StringSlice
+	}{
+		{in: "./_testdata/dir_45", out: 13},
+		{in: "./_testdata/dir_45/", out: 13},
+		{in: "./_testdata/XXX_SDASD", out: 0},
+		{in: "./_testdata/file_33.html", out: 1},
+		{in: "./_testdata", out: 0, exclude: StringSlice{"_testdata*"}},
+		{in: "./_testdata", out: 11, exclude: StringSlice{"*.html"}},
+		{in: "./_testdata", out: 11, exclude: StringSlice{"*.html"}},
+		{in: "./_testdata", out: 6, exclude: StringSlice{"*dir_45*"}},
+	}
+
+	for _, test := range tests {
+		logger, buf := getTestLogger()
+		fileChan := loadLocalFiles(test.in, test.exclude, logger)
+		files := sink(fileChan)
+		if len(files) != test.out {
+			t.Errorf("wanted %d files, got %d files", test.out, len(files))
+			t.Errorf("%s\n", buf)
 		}
-
-		_, err = sink(fileChan)
-		if err != nil {
-			b.Error(err)
-			return
-		}
-	}
-
-}
-
-func TestLoadSomeLocalFiles(t *testing.T) {
-	logger, buf := getTestLogger()
-	var exclude StringSlice
-	fileChan, err := loadLocalFiles("./_testdata/dir_45", exclude, logger)
-
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	files, err := sink(fileChan)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	expected := 13
-	actual := len(files)
-	if actual != expected {
-		t.Errorf("wanted %d files, got %d files", expected, actual)
-		t.Errorf("%s\n", buf)
 	}
 }
 
-func TestLoadNonExistingDirShouldFail(t *testing.T) {
-	logger, _ := getTestLogger()
-	var exclude StringSlice
-	_, err := loadLocalFiles("./_testdata/XXX_SDASD", exclude, logger)
-	if err == nil {
-		t.Error("Expected an error")
-		return
-	}
-	expected := "stat ./_testdata/XXX_SDASD: no such file or directory"
-	if err.Error() != expected {
-		t.Errorf("Expected error '%s', got '%s'", expected, err.Error())
-	}
-}
-
-func TestLoadFileShouldFail(t *testing.T) {
-	logger, _ := getTestLogger()
-	var exclude StringSlice
-	_, err := loadLocalFiles("./_testdata/file_33.html", exclude, logger)
-	if err == nil {
-		t.Error("Expected an error")
-		return
-	}
-	expected := "./_testdata/file_33.html is not a directory"
-	if err.Error() != expected {
-		t.Errorf("Expected error '%s', got '%s'", expected, err.Error())
-	}
-}
-
-func TestLoadFilesExcludeAll(t *testing.T) {
-	logger, buf := getTestLogger()
-	exclude := StringSlice{"_testdata*"}
-	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
-	if err != nil {
-		t.Errorf("Did not expect error: %s", err)
-		return
-	}
-
-	files, err := sink(fileChan)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	expected := 0
-	actual := len(files)
-	if actual != expected {
-		t.Errorf("wanted %d files, got %d files", expected, actual)
-		t.Errorf("%s\n", buf)
-	}
-}
-
-func TestLoadFilesExcludeHTML(t *testing.T) {
-	logger, buf := getTestLogger()
-	exclude := StringSlice{"*.html"}
-	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
-	if err != nil {
-		t.Errorf("Did not expect error: %s", err)
-		return
-	}
-
-	files, err := sink(fileChan)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	expected := 11
-	actual := len(files)
-	if actual != expected {
-		t.Errorf("wanted %d files, got %d files", expected, actual)
-		t.Errorf("%s\n", buf)
-	}
-}
-
-func TestLoadFilesExclude70(t *testing.T) {
-	logger, buf := getTestLogger()
-	exclude := StringSlice{"*dir_45*"}
-	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
-	if err != nil {
-		t.Errorf("Did not expect error: %s", err)
-		return
-	}
-
-	files, err := sink(fileChan)
-	if err != nil {
-		t.Error(err)
-		return
-	}
-
-	expected := 6
-	actual := len(files)
-	if actual != expected {
-		t.Errorf("wanted %d files, got %d files", expected, actual)
-		t.Errorf("%s\n", buf)
-	}
-}
-
-func sink(in chan *FileStat) (map[string]*FileStat, error) {
+func sink(in chan *FileStat) map[string]*FileStat {
 	out := make(map[string]*FileStat)
 	for f := range in {
 		if f.Err != nil {
-			return out, f.Err
+			return out
 		}
 		out[f.Path] = f
 	}
-	return out, nil
+	return out
 }
 
 func getTestLogger() (*Logger, *bytes.Buffer) {

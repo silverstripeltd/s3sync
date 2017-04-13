@@ -77,8 +77,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	//bucket := t.Host
-	//bucketPath := t.Path
 	sess := session.Must(getSession(profile, region, logger))
 
 	config := &Config{
@@ -87,13 +85,7 @@ func main() {
 		BucketPrefix: strings.TrimPrefix(t.Path, "/"),
 	}
 
-	local, err := loadLocalFiles(path, exclude, logger)
-	if err != nil {
-		logger.Err.Printf("\n%s\n", err)
-		// stop go routines?
-		os.Exit(1)
-	}
-
+	local := loadLocalFiles(path, exclude, logger)
 	// we keep 50,000 (50 s3:listObjects calls) to be in the output remote channel,
 	// this will ensure that we can find all local files without blocking the AWS calls
 	remote := loadS3Files(config, 50000, logger)
