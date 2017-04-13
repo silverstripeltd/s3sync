@@ -21,25 +21,26 @@ func TestLoadAllLocalFiles(t *testing.T) {
 		t.Errorf("%s\n", buf)
 	}
 
-	filename := "_testdata/file_33.html"
+	filename := "file_33.html"
 	file, ok := files[filename]
 	if !ok {
 		t.Errorf("Couldn't find file '%s' in file list", filename)
+		t.Errorf("%+v", files)
 		return
 	}
 
 	if file.Err != nil {
 		t.Errorf("Expected file.Err to be nil, got %v\n", file.Err)
 	}
-	if file.Path != filename {
-		t.Errorf("Expected file.Path to be %s, got %s\n", filename, file.Path)
+	if file.Name != filename {
+		t.Errorf("Expected file.Path to be %s, got %s\n", filename, file.Name)
 	}
 	if file.Size != 34 {
 		t.Errorf("Expected file.Path to be %d, got %d\n", 34, file.Size)
 	}
 
-	if file.Path != filename {
-		t.Errorf("expected file.path ('%s') to be the same as the key ('%s') of the map", file.Path, filename)
+	if file.Name != filename {
+		t.Errorf("expected file.path ('%s') to be the same as the key ('%s') of the map", file.Name, filename)
 	}
 }
 
@@ -60,7 +61,7 @@ func TestLoadSingleFile(t *testing.T) {
 		t.Errorf("%s\n", buf)
 	}
 
-	filename := "./_testdata/file_33.html"
+	filename := "file_33.html"
 	_, ok := files[filename]
 	if !ok {
 		t.Errorf("Couldn't find file '%s' in file list", filename)
@@ -79,8 +80,7 @@ func TestLoadFiles(t *testing.T) {
 		{in: "./_testdata/dir_45/", out: 13},
 		{in: "./_testdata/XXX_SDASD", out: 0},
 		{in: "./_testdata/file_33.html", out: 1},
-		{in: "./_testdata", out: 0, exclude: StringSlice{"_testdata*"}},
-		{in: "./_testdata", out: 11, exclude: StringSlice{"*.html"}},
+		{in: "./_testdata", out: 0, exclude: StringSlice{"*"}},
 		{in: "./_testdata", out: 11, exclude: StringSlice{"*.html"}},
 		{in: "./_testdata", out: 6, exclude: StringSlice{"*dir_45*"}},
 	}
@@ -102,7 +102,7 @@ func sink(in chan *FileStat) map[string]*FileStat {
 		if f.Err != nil {
 			return out
 		}
-		out[f.Path] = f
+		out[f.Name] = f
 	}
 	return out
 }

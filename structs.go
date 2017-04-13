@@ -25,6 +25,7 @@ type Config struct {
 // was not possible to get
 type FileStat struct {
 	Err     error
+	Name    string
 	Path    string
 	Size    int64
 	ModTime time.Time
@@ -34,7 +35,7 @@ func (f *FileStat) String() string {
 	if f.Err != nil {
 		return fmt.Sprintf("%v", f.Err)
 	}
-	return fmt.Sprintf("%s size: %d, mtime: %s", f.Path, f.Size, f.ModTime)
+	return fmt.Sprintf("%s size: %d, mtime: %s", f.Name, f.Size, f.ModTime)
 }
 
 // StringSlice is usable for being able to use multiple flags of the same value, example:  -exclude "file1" -exclude "file2"

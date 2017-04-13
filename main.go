@@ -52,7 +52,7 @@ func main() {
 		logger.Out.SetOutput(ioutil.Discard)
 	}
 
-	path, err := filepath.Abs(flag.Arg(0))
+	localPath, err := filepath.Abs(flag.Arg(0))
 	if err != nil {
 		flag.Usage()
 		logger.Err.Printf("\nCould not parse LocalPath '%s': %s\n", flag.Arg(0), err)
@@ -85,12 +85,14 @@ func main() {
 		BucketPrefix: strings.TrimPrefix(t.Path, "/"),
 	}
 
-	local := loadLocalFiles(path, exclude, logger)
+	local := loadLocalFiles(localPath, exclude, logger)
 	// we keep 50,000 (50 s3:listObjects calls) to be in the output remote channel,
 	// this will ensure that we can find all local files without blocking the AWS calls
 	remote := loadS3Files(config, 50000, logger)
+	// find out which files that needs syncing
 	files := compare(local, remote, logger)
-	syncFiles(config, path, files, logger)
+	// sync all files to s3
+	syncFiles(config, files, logger)
 }
 
 // compare will put a local file on the output channel if:
@@ -109,7 +111,7 @@ func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileS
 			logger.Err.Println(r.Err)
 			continue
 		}
-		localFiles[r.Path] = r
+		localFiles[r.Name] = r
 	}
 
 	numLocalFiles := len(localFiles)
@@ -124,15 +126,15 @@ func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileS
 			}
 			numRemoteFiles++
 			// check if the remote have a local representation
-			if local, ok := localFiles[remote.Path]; ok {
+			if local, ok := localFiles[remote.Name]; ok {
 				// we "handled" this local file now
-				delete(localFiles, remote.Path)
+				delete(localFiles, remote.Name)
 				// check if we need to update this file
 				if local.Size != remote.Size {
-					logger.Debug.Printf("syncing: %s, size %d -> %d\n", local.Path, local.Size, remote.Size)
+					logger.Debug.Printf("syncing: %s, size %d -> %d\n", local.Name, local.Size, remote.Size)
 					update <- local
 				} else if local.ModTime.After(remote.ModTime) {
-					logger.Debug.Printf("syncing: %s, modified time: %s -> %s\n", local.Path, local.ModTime, remote.ModTime.In(local.ModTime.Location()))
+					logger.Debug.Printf("syncing: %s, modified time: %s -> %s\n", local.Name, local.ModTime, remote.ModTime.In(local.ModTime.Location()))
 					update <- local
 				}
 			}
@@ -140,7 +142,7 @@ func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileS
 		}
 		// now we check the left-overs in the local file that hasn't been handled since they dont exist on the remote
 		for _, local := range localFiles {
-			logger.Debug.Printf("syncing: %s, file does not exist at destination\n", local.Path)
+			logger.Debug.Printf("syncing: %s, file does not exist at destination\n", local.Name)
 			update <- local
 		}
 		logger.Debug.Printf("Found %d local files\n", numLocalFiles)
@@ -151,24 +153,25 @@ func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileS
 }
 
 // syncFiles takes a channel of *FileStat and tries to upload them to s3
-func syncFiles(config *Config, localPath string, in chan *FileStat, logger *Logger) {
-	svc := config.S3Service
-	bucket := config.Bucket
-	bucketPath := config.BucketPrefix
+func syncFiles(config *Config, in chan *FileStat, logger *Logger) {
 
 	concurrency := 5
 	sem := make(chan bool, concurrency)
 	var numSyncedFiles int
 
 	for file := range in {
-		numSyncedFiles++
 		// add one
 		sem <- true
-		go func(svc *s3.S3, bucket, bucketPath, localPath string, file *FileStat, logger *Logger) {
-			upload(svc, bucket, bucketPath, localPath, file, logger)
+		go func(config *Config, file *FileStat, logger *Logger) {
+			err := upload(config, file, logger)
+			if err != nil {
+				logger.Err.Println(err)
+			} else {
+				numSyncedFiles++
+			}
 			// remove one
 			<-sem
-		}(svc, bucket, bucketPath, localPath, file, logger)
+		}(config, file, logger)
 	}
 
 	// After the last goroutine is fired, there are still concurrency amount of goroutines running. In order to make
@@ -182,43 +185,43 @@ func syncFiles(config *Config, localPath string, in chan *FileStat, logger *Logg
 	logger.Debug.Printf("Synced %d local files to remote\n", numSyncedFiles)
 }
 
-func upload(svc *s3.S3, bucket, bucketPath, localPath string, fileData *FileStat, logger *Logger) {
+func upload(config *Config, fileStat *FileStat, logger *Logger) error {
 
-	realFilePath := filepath.Join(localPath, fileData.Path)
-	realFile, err := os.Open(realFilePath)
+	logger.Debug.Printf("will upload %s to s3://%s/%s\n", fileStat.Path, config.Bucket, config.BucketPrefix)
+
+	file, err := os.Open(fileStat.Path)
 	if err != nil {
-		logger.Err.Printf("error opening file: %s\n", err)
-		return
+		return err
 	}
 	defer func() {
-		err := realFile.Close()
-		if err != nil {
-			logger.Err.Printf("Problem closing file %s: %v", realFilePath, err)
+		if err := file.Close(); err != nil {
+			logger.Err.Printf("Problem closing file %s: %v", fileStat.Path, err)
 		}
 	}()
 
-	key := filepath.Join(bucketPath, fileData.Path)
+	key := filepath.Join(config.BucketPrefix, fileStat.Name)
 	key = strings.TrimPrefix(key, "/")
 
 	// Create an uploader (can do multipart) with S3 client and default options
-	uploader := s3manager.NewUploaderWithClient(svc)
+	uploader := s3manager.NewUploaderWithClient(config.S3Service)
 	params := &s3manager.UploadInput{
-		Bucket: aws.String(bucket),
+		Bucket: aws.String(config.Bucket),
 		Key:    aws.String(key),
-		Body:   bufio.NewReader(realFile),
+		Body:   bufio.NewReader(file),
 	}
 
-	s3Uri := filepath.Join(bucket, key)
-	if !dryrun {
-		_, err := uploader.Upload(params)
-		if err != nil {
-			logger.Out.Printf("bad response: %+v", err)
-			return
-		}
-		logger.Out.Printf("upload: %s to s3://%s\n", fileData.Path, s3Uri)
-	} else {
-		logger.Out.Printf("(dryrun) upload: %s to s3://%s\n", fileData.Path, s3Uri)
+	s3Uri := filepath.Join(config.Bucket, key)
+	if dryrun {
+		logger.Out.Printf("(dryrun) upload: %s to s3://%s\n", fileStat.Name, s3Uri)
+		return nil
 	}
+
+	if _, err = uploader.Upload(params); err != nil {
+		return err
+	}
+
+	logger.Out.Printf("upload: %s to s3://%s\n", fileStat.Name, s3Uri)
+	return nil
 }
 
 func getSession(profile, region string, logger *Logger) (*session.Session, error) {

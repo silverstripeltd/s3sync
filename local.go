@@ -11,22 +11,29 @@ func loadLocalFiles(basePath string, exclude StringSlice, logger *Logger) chan *
 
 	out := make(chan *FileStat)
 
-	regulatedPath := filepath.ToSlash(basePath)
+	basePath = filepath.ToSlash(basePath)
 
 	go func() {
 		defer close(out)
 		start := time.Now()
 		logger.Debug.Printf("read local - start at %s", start)
 
-		stat, err := os.Stat(regulatedPath)
+		stat, err := os.Stat(basePath)
 		if err != nil {
-			logger.Err.Printf("Error while reading local files: %v\n", err)
+			logger.Err.Printf("%s\n", err)
+			return
+		}
+
+		absPath, err := filepath.Abs(basePath)
+		if err != nil {
+			out <- &FileStat{Err: err}
 			return
 		}
 
 		if !stat.IsDir() {
 			out <- &FileStat{
-				Path:    basePath,
+				Name:    filepath.Base(basePath),
+				Path:    absPath,
 				ModTime: stat.ModTime(),
 				Size:    stat.Size(),
 			}
@@ -34,7 +41,8 @@ func loadLocalFiles(basePath string, exclude StringSlice, logger *Logger) chan *
 		}
 
 		err = filepath.Walk(basePath, func(filePath string, stat os.FileInfo, err error) error {
-			relativePath := relativePath(regulatedPath, filepath.ToSlash(filePath))
+
+			relativePath := relativePath(basePath, filepath.ToSlash(filePath))
 			for _, pattern := range exclude {
 				if globMatch(pattern, relativePath) {
 					logger.Debug.Printf("excluding %s\n", relativePath)
@@ -47,8 +55,15 @@ func loadLocalFiles(basePath string, exclude StringSlice, logger *Logger) chan *
 			if stat == nil || stat.IsDir() {
 				return nil
 			}
+			absPath, err := filepath.Abs(filePath)
+			if err != nil {
+				out <- &FileStat{
+					Err: err,
+				}
+			}
 			out <- &FileStat{
-				Path:    relativePath,
+				Name:    relativePath,
+				Path:    absPath,
 				ModTime: stat.ModTime(),
 				Size:    stat.Size(),
 			}
@@ -68,5 +83,7 @@ func relativePath(path string, filePath string) string {
 	if path == "." {
 		return strings.TrimPrefix(filePath, "/")
 	}
-	return strings.TrimPrefix(strings.TrimPrefix(filePath, path), "/")
+	path = strings.TrimPrefix(path, "./")
+	a := strings.TrimPrefix(filePath, path)
+	return strings.TrimPrefix(a, "/")
 }

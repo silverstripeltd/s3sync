@@ -12,38 +12,38 @@ func TestCompare(t *testing.T) {
 		shouldSync bool
 	}{
 		{
-			local:      &FileStat{Path: "file.html", Size: 1, ModTime: time.Time{}},
-			remote:     &FileStat{Path: "file.html", Size: 1, ModTime: time.Time{}},
+			local:      &FileStat{Name: "file.html", Size: 1, ModTime: time.Time{}},
+			remote:     &FileStat{Name: "file.html", Size: 1, ModTime: time.Time{}},
 			shouldSync: false,
 		},
 		{
-			local:      &FileStat{Path: "file2.html", Size: 1, ModTime: time.Time{}},
-			remote:     &FileStat{Path: "file.html", Size: 1, ModTime: time.Time{}},
+			local:      &FileStat{Name: "lol.html", Size: 1, ModTime: time.Time{}},
+			remote:     &FileStat{Name: "file.html", Size: 1, ModTime: time.Time{}},
 			shouldSync: true,
 		},
 		{
-			local:      &FileStat{Path: "file.html", Size: 1, ModTime: time.Time{}},
-			remote:     &FileStat{Path: "file.html", Size: 2, ModTime: time.Time{}},
+			local:      &FileStat{Name: "file.html", Size: 1, ModTime: time.Time{}},
+			remote:     &FileStat{Name: "file.html", Size: 2, ModTime: time.Time{}},
 			shouldSync: true,
 		},
 		{
-			local:      &FileStat{Path: "file.html", Size: 2, ModTime: time.Time{}},
-			remote:     &FileStat{Path: "file.html", Size: 1, ModTime: time.Time{}},
+			local:      &FileStat{Name: "file.html", Size: 2, ModTime: time.Time{}},
+			remote:     &FileStat{Name: "file.html", Size: 1, ModTime: time.Time{}},
 			shouldSync: true,
 		},
 		{
-			local:      &FileStat{Path: "file.html", Size: 1, ModTime: time.Time{}},
-			remote:     &FileStat{Path: "file.html", Size: 1, ModTime: time.Now()},
+			local:      &FileStat{Name: "file.html", Size: 1, ModTime: time.Time{}},
+			remote:     &FileStat{Name: "file.html", Size: 1, ModTime: time.Now()},
 			shouldSync: false,
 		},
 		{
-			local:      &FileStat{Path: "file.html", Size: 1, ModTime: time.Now()},
-			remote:     &FileStat{Path: "file.html", Size: 1, ModTime: time.Time{}},
+			local:      &FileStat{Name: "file.html", Size: 1, ModTime: time.Now()},
+			remote:     &FileStat{Name: "file.html", Size: 1, ModTime: time.Time{}},
 			shouldSync: true,
 		},
 		{
-			local:      &FileStat{Path: "file.html", Size: 1, ModTime: time.Now()},
-			remote:     &FileStat{Path: "file.html", Size: 1, ModTime: time.Now().Add(-time.Minute)},
+			local:      &FileStat{Name: "file.html", Size: 1, ModTime: time.Now()},
+			remote:     &FileStat{Name: "file.html", Size: 1, ModTime: time.Now().Add(-time.Minute)},
 			shouldSync: true,
 		},
 	}

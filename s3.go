@@ -34,7 +34,8 @@ func listS3Files(config *Config, out chan *FileStat, token *string) *string {
 	}
 	for _, object := range list.Contents {
 		out <- &FileStat{
-			Path:    strings.TrimPrefix(*object.Key, config.BucketPrefix+"/"),
+			Name:    strings.TrimPrefix(*object.Key, config.BucketPrefix+"/"),
+			Path:    *object.Key,
 			Size:    *object.Size,
 			ModTime: *object.LastModified,
 		}
