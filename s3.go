@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-func loadS3Files(svc *s3.S3, bucket, path string, buffer int, logger *Logger) (chan LocalFileResult, error) {
-	out := make(chan LocalFileResult, buffer)
+func loadS3Files(svc *s3.S3, bucket, path string, buffer int, logger *Logger) (chan *FileStat, error) {
+	out := make(chan *FileStat, buffer)
 
 	// s3 doesn't like the key to start with /
 	path = strings.TrimPrefix(path, "/")
@@ -33,7 +33,7 @@ func loadS3Files(svc *s3.S3, bucket, path string, buffer int, logger *Logger) (c
 	return out, nil
 }
 
-func trawlS3(svc *s3.S3, path string, bucket, prefix string, out chan LocalFileResult, token *string, logger *Logger) {
+func trawlS3(svc *s3.S3, path string, bucket, prefix string, out chan *FileStat, token *string, logger *Logger) {
 	list, err := svc.ListObjectsV2(&s3.ListObjectsV2Input{
 		Bucket:            aws.String(bucket),
 		Prefix:            aws.String(prefix),
@@ -41,8 +41,8 @@ func trawlS3(svc *s3.S3, path string, bucket, prefix string, out chan LocalFileR
 	})
 
 	if err != nil {
-		out <- LocalFileResult{
-			err: err,
+		out <- &FileStat{
+			Err: err,
 		}
 		return
 	}
@@ -51,12 +51,10 @@ func trawlS3(svc *s3.S3, path string, bucket, prefix string, out chan LocalFileR
 		// strip out the full path of the object, begin after path
 		p := strings.TrimPrefix(*object.Key, path)
 		p = strings.TrimPrefix(p, "/")
-		out <- LocalFileResult{
-			file: &File{
-				path:  p,
-				size:  *object.Size,
-				mtime: *object.LastModified,
-			},
+		out <- &FileStat{
+			Path:    p,
+			Size:    *object.Size,
+			ModTime: *object.LastModified,
 		}
 	}
 

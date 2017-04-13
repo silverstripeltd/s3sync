@@ -2,13 +2,11 @@ package main
 
 import "time"
 
-type LocalFileResult struct {
-	err  error
-	file *File
-}
-
-type File struct {
-	path  string
-	size  int64
-	mtime time.Time
+// A FileStat describes a local and remote file and can contain an error if the information
+// was not possible to get
+type FileStat struct {
+	Err     error
+	Path    string
+	Size    int64
+	ModTime time.Time
 }

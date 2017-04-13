@@ -8,9 +8,9 @@ import (
 	"time"
 )
 
-func loadLocalFiles(basePath string, exclude stringSlice, logger *Logger) (chan LocalFileResult, error) {
+func loadLocalFiles(basePath string, exclude stringSlice, logger *Logger) (chan *FileStat, error) {
 
-	out := make(chan LocalFileResult)
+	out := make(chan *FileStat)
 
 	regulatedPath := filepath.ToSlash(basePath)
 
@@ -36,12 +36,10 @@ func loadLocalFiles(basePath string, exclude stringSlice, logger *Logger) (chan 
 
 		p := relativePath(regulatedPath, filepath.ToSlash(filePath))
 
-		out <- LocalFileResult{
-			file: &File{
-				path:  p,
-				mtime: stat.ModTime(),
-				size:  stat.Size(),
-			},
+		out <- &FileStat{
+			Path:    p,
+			ModTime: stat.ModTime(),
+			Size:    stat.Size(),
 		}
 		return nil
 	}

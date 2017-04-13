@@ -36,8 +36,8 @@ func TestLoadAllLocalFiles(t *testing.T) {
 		return
 	}
 
-	if file.path != filename {
-		t.Errorf("expected file.path ('%s') to be the same as the key ('%s') of the map", file.path, filename)
+	if file.Path != filename {
+		t.Errorf("expected file.path ('%s') to be the same as the key ('%s') of the map", file.Path, filename)
 	}
 }
 
@@ -184,13 +184,13 @@ func TestLoadFilesExclude70(t *testing.T) {
 	}
 }
 
-func sink(in chan LocalFileResult) (map[string]*File, error) {
-	out := make(map[string]*File)
+func sink(in chan *FileStat) (map[string]*FileStat, error) {
+	out := make(map[string]*FileStat)
 	for f := range in {
-		if f.err != nil {
-			return out, f.err
+		if f.Err != nil {
+			return out, f.Err
 		}
-		out[f.file.path] = f.file
+		out[f.Path] = f
 	}
 	return out, nil
 }

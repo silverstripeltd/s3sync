@@ -115,18 +115,18 @@ func main() {
 // - the last modified time of the local file is newer than the last modified time of the s3 object
 // - the local file does not exist under the specified bucket and prefix.
 // This is the same logic as the aws s3 sync tool uses, see https://github.com/aws/aws-cli/blob/e2295b022db35eea9fec7e6c5540d06dbd6e588b/awscli/customizations/s3/syncstrategy/base.py#L226
-func compare(foundLocal, foundRemote chan LocalFileResult, logger *Logger) chan *File {
+func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileStat {
 
-	update := make(chan *File, 8)
+	update := make(chan *FileStat, 8)
 
 	// first we sink the local files into a lookup map so its quick and easy to compare that to the remote
-	localFiles := make(map[string]*File)
+	localFiles := make(map[string]*FileStat)
 	for r := range foundLocal {
-		if r.err != nil {
-			logger.Out.Println(r.err)
+		if r.Err != nil {
+			logger.Out.Println(r.Err)
 			continue
 		}
-		localFiles[r.file.path] = r.file
+		localFiles[r.Path] = r
 	}
 
 	numLocalFiles := len(localFiles)
@@ -135,32 +135,32 @@ func compare(foundLocal, foundRemote chan LocalFileResult, logger *Logger) chan 
 	go func() {
 		for remote := range foundRemote {
 			numRemoteFiles++
-			if remote.err != nil {
-				logger.Out.Println(remote.err)
+			if remote.Err != nil {
+				logger.Out.Println(remote.Err)
 				continue
 			}
 
 			// see if there is a local file that matches the remote file
-			var local *File
+			var local *FileStat
 			var ok bool
 			// check if the remote have a local representation
-			if local, ok = localFiles[remote.file.path]; !ok {
+			if local, ok = localFiles[remote.Path]; !ok {
 				continue
 			}
 			// we "handled" this local file now
-			delete(localFiles, remote.file.path)
+			delete(localFiles, remote.Path)
 			// check if we need to update this file
-			if local.size != remote.file.size {
-				logger.Debug.Printf("syncing: %s, size %d -> %d\n", local.path, local.size, remote.file.size)
+			if local.Size != remote.Size {
+				logger.Debug.Printf("syncing: %s, size %d -> %d\n", local.Path, local.Size, remote.Size)
 				update <- local
-			} else if local.mtime.After(remote.file.mtime) {
-				logger.Debug.Printf("syncing: %s, modified time: %s -> %s\n", local.path, local.mtime, remote.file.mtime.In(local.mtime.Location()))
+			} else if local.ModTime.After(remote.ModTime) {
+				logger.Debug.Printf("syncing: %s, modified time: %s -> %s\n", local.Path, local.ModTime, remote.ModTime.In(local.ModTime.Location()))
 				update <- local
 			}
 		}
 		// now we check the left-overs in the local file that hasn't been handled since they dont exist on the remote
 		for _, local := range localFiles {
-			logger.Debug.Printf("syncing: %s, file does not exist at destination\n", local.path)
+			logger.Debug.Printf("syncing: %s, file does not exist at destination\n", local.Path)
 			update <- local
 		}
 		close(update)
@@ -170,7 +170,7 @@ func compare(foundLocal, foundRemote chan LocalFileResult, logger *Logger) chan 
 	return update
 }
 
-func syncFiles(svc *s3.S3, bucket, bucketPath, localPath string, in chan *File, logger *Logger) {
+func syncFiles(svc *s3.S3, bucket, bucketPath, localPath string, in chan *FileStat, logger *Logger) {
 
 	concurrency := 5
 	sem := make(chan bool, concurrency)
@@ -180,7 +180,7 @@ func syncFiles(svc *s3.S3, bucket, bucketPath, localPath string, in chan *File, 
 		numSyncedFiles++
 		// add one
 		sem <- true
-		go func(svc *s3.S3, bucket, bucketPath, localPath string, file *File, logger *Logger) {
+		go func(svc *s3.S3, bucket, bucketPath, localPath string, file *FileStat, logger *Logger) {
 			upload(svc, bucket, bucketPath, localPath, file, logger)
 			// remove one
 			<-sem
@@ -198,9 +198,9 @@ func syncFiles(svc *s3.S3, bucket, bucketPath, localPath string, in chan *File, 
 	logger.Debug.Printf("Synced %d local files to remote\n", numSyncedFiles)
 }
 
-func upload(svc *s3.S3, bucket, bucketPath, localPath string, fileData *File, logger *Logger) {
+func upload(svc *s3.S3, bucket, bucketPath, localPath string, fileData *FileStat, logger *Logger) {
 
-	realFilePath := filepath.Join(localPath, fileData.path)
+	realFilePath := filepath.Join(localPath, fileData.Path)
 	realFile, err := os.Open(realFilePath)
 	if err != nil {
 		logger.Err.Printf("error opening file: %s\n", err)
@@ -213,7 +213,7 @@ func upload(svc *s3.S3, bucket, bucketPath, localPath string, fileData *File, lo
 		}
 	}()
 
-	key := filepath.Join(bucketPath, fileData.path)
+	key := filepath.Join(bucketPath, fileData.Path)
 	key = strings.TrimPrefix(key, "/")
 
 	// Create an uploader (can do multipart) with S3 client and default options
@@ -231,9 +231,9 @@ func upload(svc *s3.S3, bucket, bucketPath, localPath string, fileData *File, lo
 			logger.Out.Printf("bad response: %+v", err)
 			return
 		}
-		logger.Out.Printf("upload: %s to s3://%s\n", fileData.path, s3Uri)
+		logger.Out.Printf("upload: %s to s3://%s\n", fileData.Path, s3Uri)
 	} else {
-		logger.Out.Printf("(dryrun) upload: %s to s3://%s\n", fileData.path, s3Uri)
+		logger.Out.Printf("(dryrun) upload: %s to s3://%s\n", fileData.Path, s3Uri)
 	}
 }
 
