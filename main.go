@@ -106,7 +106,7 @@ func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileS
 	localFiles := make(map[string]*FileStat)
 	for r := range foundLocal {
 		if r.Err != nil {
-			logger.Out.Println(r.Err)
+			logger.Err.Println(r.Err)
 			continue
 		}
 		localFiles[r.Path] = r
@@ -122,26 +122,21 @@ func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileS
 				logger.Err.Printf("Remote %s\n", remote.Err)
 				return
 			}
-
 			numRemoteFiles++
-
-			// see if there is a local file that matches the remote file
-			var local *FileStat
-			var ok bool
 			// check if the remote have a local representation
-			if local, ok = localFiles[remote.Path]; !ok {
-				continue
+			if local, ok := localFiles[remote.Path]; ok {
+				// we "handled" this local file now
+				delete(localFiles, remote.Path)
+				// check if we need to update this file
+				if local.Size != remote.Size {
+					logger.Debug.Printf("syncing: %s, size %d -> %d\n", local.Path, local.Size, remote.Size)
+					update <- local
+				} else if local.ModTime.After(remote.ModTime) {
+					logger.Debug.Printf("syncing: %s, modified time: %s -> %s\n", local.Path, local.ModTime, remote.ModTime.In(local.ModTime.Location()))
+					update <- local
+				}
 			}
-			// we "handled" this local file now
-			delete(localFiles, remote.Path)
-			// check if we need to update this file
-			if local.Size != remote.Size {
-				logger.Debug.Printf("syncing: %s, size %d -> %d\n", local.Path, local.Size, remote.Size)
-				update <- local
-			} else if local.ModTime.After(remote.ModTime) {
-				logger.Debug.Printf("syncing: %s, modified time: %s -> %s\n", local.Path, local.ModTime, remote.ModTime.In(local.ModTime.Location()))
-				update <- local
-			}
+
 		}
 		// now we check the left-overs in the local file that hasn't been handled since they dont exist on the remote
 		for _, local := range localFiles {

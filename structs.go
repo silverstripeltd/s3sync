@@ -30,6 +30,13 @@ type FileStat struct {
 	ModTime time.Time
 }
 
+func (f *FileStat) String() string {
+	if f.Err != nil {
+		return fmt.Sprintf("%v", f.Err)
+	}
+	return fmt.Sprintf("%s size: %d, mtime: %s", f.Path, f.Size, f.ModTime)
+}
+
 // StringSlice is usable for being able to use multiple flags of the same value, example:  -exclude "file1" -exclude "file2"
 type StringSlice []string
 
