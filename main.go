@@ -96,13 +96,7 @@ func main() {
 
 	// we keep 50,000 (50 s3:listObjects calls) to be in the output remote channel,
 	// this will ensure that we can find all local files without blocking the AWS calls
-	remote, err := loadS3Files(config, 50000, logger)
-	if err != nil {
-		logger.Err.Printf("\n%s\n", err)
-		// stop go routines?
-		os.Exit(1)
-	}
-
+	remote := loadS3Files(config, 50000, logger)
 	files := compare(local, remote, logger)
 	syncFiles(config, path, files, logger)
 }
@@ -130,13 +124,14 @@ func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileS
 	var numRemoteFiles int
 
 	go func() {
+		defer close(update)
 		for remote := range foundRemote {
-			numRemoteFiles++
-
 			if remote.Err != nil {
-				logger.Out.Println(remote.Err)
-				continue
+				logger.Err.Printf("Remote %s\n", remote.Err)
+				return
 			}
+
+			numRemoteFiles++
 
 			// see if there is a local file that matches the remote file
 			var local *FileStat
@@ -161,7 +156,6 @@ func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileS
 			logger.Debug.Printf("syncing: %s, file does not exist at destination\n", local.Path)
 			update <- local
 		}
-		close(update)
 		logger.Debug.Printf("Found %d local files\n", numLocalFiles)
 		logger.Debug.Printf("Found %d remote files\n", numRemoteFiles)
 	}()

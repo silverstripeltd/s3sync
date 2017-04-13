@@ -19,10 +19,10 @@ func loadLocalFiles(basePath string, exclude StringSlice, logger *Logger) (chan 
 	}
 
 	getFile := func(filePath string, stat os.FileInfo, err error) error {
-
+		relativePath := relativePath(regulatedPath, filepath.ToSlash(filePath))
 		for _, pattern := range exclude {
-			if globMatch(pattern, filePath) {
-				logger.Debug.Printf("excluding %s\n", filePath)
+			if globMatch(pattern, relativePath) {
+				logger.Debug.Printf("excluding %s\n", relativePath)
 				if stat.IsDir() {
 					return filepath.SkipDir
 				}
@@ -34,10 +34,8 @@ func loadLocalFiles(basePath string, exclude StringSlice, logger *Logger) (chan 
 			return nil
 		}
 
-		p := relativePath(regulatedPath, filepath.ToSlash(filePath))
-
 		out <- &FileStat{
-			Path:    p,
+			Path:    relativePath,
 			ModTime: stat.ModTime(),
 			Size:    stat.Size(),
 		}
@@ -45,7 +43,6 @@ func loadLocalFiles(basePath string, exclude StringSlice, logger *Logger) (chan 
 	}
 
 	go func() {
-
 		start := time.Now()
 		logger.Debug.Printf("read local - start at %s", start)
 		if err := filepath.Walk(basePath, getFile); err != nil {
