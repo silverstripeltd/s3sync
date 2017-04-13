@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"flag"
-	"fmt"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
@@ -21,7 +20,7 @@ import (
 var dryrun bool
 var debug bool
 var onlyShowErrors bool
-var exclude stringSlice
+var exclude StringSlice
 var region string
 var profile string
 
@@ -32,12 +31,6 @@ func init() {
 	flag.Var(&exclude, "exclude", "Exclude all files or objects from the command that matches the specified pattern, only supports '*' globbing.")
 	flag.StringVar(&region, "region", "", "The region to use. Overrides config/env settings.")
 	flag.StringVar(&profile, "profile", "", "Use a specific profile from your credential file.")
-}
-
-type Logger struct {
-	Out   *log.Logger
-	Err   *log.Logger
-	Debug *log.Logger
 }
 
 func main() {
@@ -283,20 +276,4 @@ func getRegion(p client.ConfigProvider, region string, logger *Logger) string {
 		}
 	}
 	return ""
-}
-
-type stringSlice []string
-
-// String is the method to format the flag's value, part of the flag.Value interface.
-// The String method's output will be used in diagnostics.
-func (s *stringSlice) String() string {
-	return fmt.Sprint(*s)
-}
-
-// Set is the method to set the flag value, part of the flag.Value interface.
-// Set's argument is a string to be parsed to set the flag.
-// It's a comma-separated list, so we split it.
-func (s *stringSlice) Set(value string) error {
-	*s = append(*s, value)
-	return nil
 }

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func loadLocalFiles(basePath string, exclude stringSlice, logger *Logger) (chan *FileStat, error) {
+func loadLocalFiles(basePath string, exclude StringSlice, logger *Logger) (chan *FileStat, error) {
 
 	out := make(chan *FileStat)
 

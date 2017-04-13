@@ -9,7 +9,7 @@ import (
 func TestLoadAllLocalFiles(t *testing.T) {
 	logger, buf := getTestLogger()
 
-	var exclude stringSlice
+	var exclude StringSlice
 	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
 	if err != nil {
 		t.Error(err)
@@ -44,7 +44,7 @@ func TestLoadAllLocalFiles(t *testing.T) {
 func BenchmarkLoadAllLocalFiles(b *testing.B) {
 	logger, _ := getTestLogger()
 
-	var exclude stringSlice
+	var exclude StringSlice
 
 	for i := 0; i < b.N; i++ {
 
@@ -65,7 +65,7 @@ func BenchmarkLoadAllLocalFiles(b *testing.B) {
 
 func TestLoadSomeLocalFiles(t *testing.T) {
 	logger, buf := getTestLogger()
-	var exclude stringSlice
+	var exclude StringSlice
 	fileChan, err := loadLocalFiles("./_testdata/dir_45", exclude, logger)
 
 	if err != nil {
@@ -89,7 +89,7 @@ func TestLoadSomeLocalFiles(t *testing.T) {
 
 func TestLoadNonExistingDirShouldFail(t *testing.T) {
 	logger, _ := getTestLogger()
-	var exclude stringSlice
+	var exclude StringSlice
 	_, err := loadLocalFiles("./_testdata/XXX_SDASD", exclude, logger)
 	if err == nil {
 		t.Error("Expected an error")
@@ -103,7 +103,7 @@ func TestLoadNonExistingDirShouldFail(t *testing.T) {
 
 func TestLoadFileShouldFail(t *testing.T) {
 	logger, _ := getTestLogger()
-	var exclude stringSlice
+	var exclude StringSlice
 	_, err := loadLocalFiles("./_testdata/file_33.html", exclude, logger)
 	if err == nil {
 		t.Error("Expected an error")
@@ -117,7 +117,7 @@ func TestLoadFileShouldFail(t *testing.T) {
 
 func TestLoadFilesExcludeAll(t *testing.T) {
 	logger, buf := getTestLogger()
-	exclude := stringSlice{"_testdata*"}
+	exclude := StringSlice{"_testdata*"}
 	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
 	if err != nil {
 		t.Errorf("Did not expect error: %s", err)
@@ -140,7 +140,7 @@ func TestLoadFilesExcludeAll(t *testing.T) {
 
 func TestLoadFilesExcludeHTML(t *testing.T) {
 	logger, buf := getTestLogger()
-	exclude := stringSlice{"*.html"}
+	exclude := StringSlice{"*.html"}
 	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
 	if err != nil {
 		t.Errorf("Did not expect error: %s", err)
@@ -163,7 +163,7 @@ func TestLoadFilesExcludeHTML(t *testing.T) {
 
 func TestLoadFilesExclude70(t *testing.T) {
 	logger, buf := getTestLogger()
-	exclude := stringSlice{"*dir_45*"}
+	exclude := StringSlice{"*dir_45*"}
 	fileChan, err := loadLocalFiles("./_testdata", exclude, logger)
 	if err != nil {
 		t.Errorf("Did not expect error: %s", err)
