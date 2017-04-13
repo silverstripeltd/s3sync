@@ -34,4 +34,8 @@ test: dev
 # install with `go get -u honnef.co/go/tools/cmd/gosimple`
 	gosimple .
 
+cover: dev
+	go test -covermode=count -coverprofile=cover.out .
+	go tool cover -html=cover.out
+
 
