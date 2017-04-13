@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/aws/aws-sdk-go/service/s3"
 	"log"
 	"time"
 )
@@ -11,6 +12,13 @@ type Logger struct {
 	Out   *log.Logger
 	Err   *log.Logger
 	Debug *log.Logger
+}
+
+// Config contains paths and configuration for local and remote file operations
+type Config struct {
+	S3Service    *s3.S3
+	Bucket       string
+	BucketPrefix string
 }
 
 // A FileStat describes a local and remote file and can contain an error if the information

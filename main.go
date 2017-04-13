@@ -77,30 +77,34 @@ func main() {
 		os.Exit(1)
 	}
 
-	bucket := t.Host
-	bucketPath := t.Path
-
+	//bucket := t.Host
+	//bucketPath := t.Path
 	sess := session.Must(getSession(profile, region, logger))
 
-	svc := s3.New(sess)
+	config := &Config{
+		S3Service:    s3.New(sess),
+		Bucket:       t.Host,
+		BucketPrefix: strings.TrimPrefix(t.Path, "/"),
+	}
+
 	local, err := loadLocalFiles(path, exclude, logger)
 	if err != nil {
 		logger.Err.Printf("\n%s\n", err)
-		// stop goroutines
+		// stop go routines?
 		os.Exit(1)
 	}
 
 	// we keep 50,000 (50 s3:listObjects calls) to be in the output remote channel,
 	// this will ensure that we can find all local files without blocking the AWS calls
-	remote, err := loadS3Files(svc, bucket, bucketPath, 50000, logger)
+	remote, err := loadS3Files(config, 50000, logger)
 	if err != nil {
 		logger.Err.Printf("\n%s\n", err)
-		// stop goroutines
+		// stop go routines?
 		os.Exit(1)
 	}
 
 	files := compare(local, remote, logger)
-	syncFiles(svc, bucket, bucketPath, path, files, logger)
+	syncFiles(config, path, files, logger)
 }
 
 // compare will put a local file on the output channel if:
@@ -128,6 +132,7 @@ func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileS
 	go func() {
 		for remote := range foundRemote {
 			numRemoteFiles++
+
 			if remote.Err != nil {
 				logger.Out.Println(remote.Err)
 				continue
@@ -160,10 +165,15 @@ func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileS
 		logger.Debug.Printf("Found %d local files\n", numLocalFiles)
 		logger.Debug.Printf("Found %d remote files\n", numRemoteFiles)
 	}()
+
 	return update
 }
 
-func syncFiles(svc *s3.S3, bucket, bucketPath, localPath string, in chan *FileStat, logger *Logger) {
+// syncFiles takes a channel of *FileStat and tries to upload them to s3
+func syncFiles(config *Config, localPath string, in chan *FileStat, logger *Logger) {
+	svc := config.S3Service
+	bucket := config.Bucket
+	bucketPath := config.BucketPrefix
 
 	concurrency := 5
 	sem := make(chan bool, concurrency)
