@@ -32,7 +32,7 @@ s3sync [options] source_directory s3://bucket_name/prefix
     	The region to use. Overrides config/env settings.
 ```
 
-# Example benchmark
+## Example benchmark
  
 This benchmark was recorded on an AWS EC2 t2.nano instance with ~25 000 files where all but two files was sup to date.
 
