@@ -2,7 +2,7 @@
 
 [![CircleCI](https://circleci.com/gh/silverstripeltd/s3sync/tree/master.svg?style=svg)](https://circleci.com/gh/silverstripeltd/s3sync/tree/master)
 
-s3sync syncs files from a local directory to a AWS S3 bucket than the aws cli tool does. It does this by being very specific in what what IO operations it does. This can make a difference when there are 100 00 files when only a few files have been updated. 
+s3sync syncs files from a local directory to a AWS S3 bucket than the aws cli tool does. It does this by being very specific in what what IO operations it does. This can make a difference when there are 10 000 files and only a few files should be synced. It also uploads files concurrently.  
  
 ## Installation
 
