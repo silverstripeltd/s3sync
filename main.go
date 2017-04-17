@@ -9,48 +9,24 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"io/ioutil"
-	"log"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 )
 
-var dryrun bool
-var debug bool
-var onlyShowErrors bool
-var exclude StringSlice
-var region string
-var profile string
-
-func init() {
-	flag.BoolVar(&dryrun, "dryrun", false, "Displays the operations that would be performed using the specified command without actually running them.")
-	flag.BoolVar(&debug, "debug", false, "Turn on debug logging.")
-	flag.BoolVar(&onlyShowErrors, "only-show-errors", false, "Only errors and warnings are displayed. All other output is suppressed.")
-	flag.Var(&exclude, "exclude", "Exclude all files or objects from the command that matches the specified pattern, only supports '*' globbing.")
-	flag.StringVar(&region, "region", "", "The region to use. Overrides config/env settings.")
-	flag.StringVar(&profile, "profile", "", "Use a specific profile from your credential file.")
-}
-
 func main() {
+	dryrun := flag.Bool("dryrun", false, "Displays the operations that would be performed using the specified command without actually running them.")
+	debug := flag.Bool("debug", false, "Turn on debug logging.")
+	onlyShowErrors := flag.Bool("only-show-errors", false, "Only errors and warnings are displayed. All other output is suppressed.")
+	region := flag.String("region", "", "The region to use. Overrides config/env settings.")
+	profile := flag.String("profile", "", "Use a specific profile from your credential file.")
+	var exclude StringSlice
+	flag.Var(&exclude, "exclude", "Exclude all files or objects from the command that matches the specified pattern, only supports '*' globbing.")
 
 	flag.Parse()
 
-	logger := &Logger{
-		Out:   log.New(os.Stdout, "", 0),
-		Err:   log.New(os.Stderr, "", 0),
-		Debug: log.New(os.Stdout, "[DEBUG] ", 0),
-	}
-
-	if !debug {
-		logger.Debug.SetOutput(ioutil.Discard)
-	}
-
-	if onlyShowErrors {
-		logger.Debug.SetOutput(ioutil.Discard)
-		logger.Out.SetOutput(ioutil.Discard)
-	}
+	logger := NewLogger(*debug, *onlyShowErrors)
 
 	localPath, err := filepath.Abs(flag.Arg(0))
 	if err != nil {
@@ -58,41 +34,47 @@ func main() {
 		logger.Err.Printf("\nCould not parse LocalPath '%s': %s\n", flag.Arg(0), err)
 		os.Exit(1)
 	}
-	S3Uri := flag.Arg(1)
 
-	t, err := url.Parse(S3Uri)
+	s3URL, err := url.Parse(flag.Arg(1))
 	if err != nil {
 		flag.Usage()
-		logger.Err.Printf("\nCould not parse S3Uri '%s'\n", S3Uri)
+		logger.Err.Printf("\nCould not parse S3Uri '%s'\n", flag.Arg(1))
 		os.Exit(1)
 	}
-	if t.Scheme != "s3" {
+	if s3URL.Scheme != "s3" {
 		flag.Usage()
 		logger.Err.Println("\nS3Uri argument does not have valid protocol, should be 's3'")
 		os.Exit(1)
 	}
-	if t.Host == "" {
+	if s3URL.Host == "" {
 		flag.Usage()
 		logger.Err.Println("\nS3Uri is missing bucket name")
 		os.Exit(1)
 	}
 
-	sess := session.Must(getSession(profile, region, logger))
+	sess, err := getSession(*profile, *region, logger)
+	if err != nil {
+		logger.Err.Printf("%v\n", err)
+	}
 
 	config := &Config{
 		S3Service:    s3.New(sess),
-		Bucket:       t.Host,
-		BucketPrefix: strings.TrimPrefix(t.Path, "/"),
+		Bucket:       s3URL.Host,
+		BucketPrefix: strings.TrimPrefix(s3URL.Path, "/"),
 	}
 
+	// load all local files that doesn't match exclude
 	local := loadLocalFiles(localPath, exclude, logger)
+
 	// we keep 50,000 (50 s3:listObjects calls) to be in the output remote channel,
 	// this will ensure that we can find all local files without blocking the AWS calls
 	remote := loadS3Files(config, 50000, logger)
+
 	// find out which files that needs syncing
 	files := compare(local, remote, logger)
+
 	// sync all files to s3
-	syncFiles(config, files, logger)
+	syncFiles(config, files, *dryrun, logger)
 }
 
 // compare will put a local file on the output channel if:
@@ -115,21 +97,18 @@ func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileS
 	}
 
 	numLocalFiles := len(localFiles)
-	var numRemoteFiles int
+	numRemoteFiles := 0
 
 	go func() {
 		defer close(update)
+
 		for remote := range foundRemote {
 			if remote.Err != nil {
 				logger.Err.Printf("Remote %s\n", remote.Err)
 				return
 			}
 			numRemoteFiles++
-			// check if the remote have a local representation
 			if local, ok := localFiles[remote.Name]; ok {
-				// we "handled" this local file now
-				delete(localFiles, remote.Name)
-				// check if we need to update this file
 				if local.Size != remote.Size {
 					logger.Debug.Printf("syncing: %s, size %d -> %d\n", local.Name, local.Size, remote.Size)
 					update <- local
@@ -137,10 +116,10 @@ func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileS
 					logger.Debug.Printf("syncing: %s, modified time: %s -> %s\n", local.Name, local.ModTime, remote.ModTime.In(local.ModTime.Location()))
 					update <- local
 				}
+				delete(localFiles, remote.Name)
 			}
-
 		}
-		// now we check the left-overs in the local file that hasn't been handled since they dont exist on the remote
+
 		for _, local := range localFiles {
 			logger.Debug.Printf("syncing: %s, file does not exist at destination\n", local.Name)
 			update <- local
@@ -153,7 +132,7 @@ func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileS
 }
 
 // syncFiles takes a channel of *FileStat and tries to upload them to s3
-func syncFiles(config *Config, in chan *FileStat, logger *Logger) {
+func syncFiles(config *Config, in chan *FileStat, dryrun bool, logger *Logger) {
 
 	concurrency := 5
 	sem := make(chan bool, concurrency)
@@ -163,7 +142,7 @@ func syncFiles(config *Config, in chan *FileStat, logger *Logger) {
 		// add one
 		sem <- true
 		go func(config *Config, file *FileStat, logger *Logger) {
-			err := upload(config, file, logger)
+			err := upload(config, file, dryrun, logger)
 			if err != nil {
 				logger.Err.Println(err)
 			} else {
@@ -176,8 +155,8 @@ func syncFiles(config *Config, in chan *FileStat, logger *Logger) {
 
 	// After the last goroutine is fired, there are still concurrency amount of goroutines running. In order to make
 	// sure we wait for all of them to finish, we attempt to fill the semaphore back up to its capacity. Once that
-	// succeeds, we know that the last goroutine has read from the semaphore, as we've done len(urls) + cap(sem) writes
-	// and len(urls) reads off the channel.
+	// succeeds, we know that the last goroutine has read from the semaphore, as we've done len(files) + cap(sem) writes
+	// and len(files) reads off the channel.
 	for i := 0; i < cap(sem); i++ {
 		sem <- true
 	}
@@ -185,7 +164,7 @@ func syncFiles(config *Config, in chan *FileStat, logger *Logger) {
 	logger.Debug.Printf("Synced %d local files to remote\n", numSyncedFiles)
 }
 
-func upload(config *Config, fileStat *FileStat, logger *Logger) error {
+func upload(config *Config, fileStat *FileStat, dryrun bool, logger *Logger) error {
 
 	logger.Debug.Printf("will upload %s to s3://%s/%s\n", fileStat.Path, config.Bucket, config.BucketPrefix)
 

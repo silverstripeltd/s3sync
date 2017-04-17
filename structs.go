@@ -2,8 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
+	"io/ioutil"
 	"log"
+	"os"
 	"time"
 )
 
@@ -14,9 +16,27 @@ type Logger struct {
 	Debug *log.Logger
 }
 
+// NewLogger creates a new Logger ready for use
+func NewLogger(debug, onlyShowErrors bool) *Logger {
+	l := &Logger{
+		Out:   log.New(os.Stdout, "", 0),
+		Err:   log.New(os.Stderr, "", 0),
+		Debug: log.New(os.Stdout, "[DEBUG] ", 0),
+	}
+	if !debug {
+		l.Debug.SetOutput(ioutil.Discard)
+	}
+
+	if onlyShowErrors {
+		l.Debug.SetOutput(ioutil.Discard)
+		l.Out.SetOutput(ioutil.Discard)
+	}
+	return l
+}
+
 // Config contains paths and configuration for local and remote file operations
 type Config struct {
-	S3Service    *s3.S3
+	S3Service    s3iface.S3API
 	Bucket       string
 	BucketPrefix string
 }
