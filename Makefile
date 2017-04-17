@@ -22,3 +22,20 @@ clean:
 	if [ -f ${BINARY}_linux ] ; then rm ${BINARY}_linux ; fi
 	if [ -f ${BINARY}_windows ] ; then rm ${BINARY}_windows ; fi
 	if [ -f ${BINARY}_darwin ] ; then rm ${BINARY}_darwin ; fi
+
+test: dev
+	go test -v -race .
+# install errcheck with `go get -u github.com/kisielk/errcheck`
+	errcheck -ignoretests .
+# install golint with `go get -u github.com/golang/lint/golint`
+	golint .
+# install varcheck with `go get -u github.com/opennota/check/cmd/varcheck`
+	varcheck .
+# install with `go get -u honnef.co/go/tools/cmd/gosimple`
+	gosimple .
+
+cover: dev
+	go test -covermode=count -coverprofile=cover.out .
+	go tool cover -html=cover.out
+
+

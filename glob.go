@@ -2,7 +2,7 @@ package main
 
 import "strings"
 
-// The character which is treated like a glob
+// GLOB is the string we use for detecting globbing
 const GLOB = "*"
 
 func globMatch(pattern, subj string) bool {
