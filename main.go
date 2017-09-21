@@ -1,18 +1,18 @@
 package main
 
 import (
-	"bufio"
 	"flag"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/ec2metadata"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
-	"net/url"
-	"os"
-	"path/filepath"
-	"strings"
 )
 
 func main() {
@@ -186,7 +186,7 @@ func upload(config *Config, fileStat *FileStat, dryrun bool, logger *Logger) err
 	params := &s3manager.UploadInput{
 		Bucket: aws.String(config.Bucket),
 		Key:    aws.String(key),
-		Body:   bufio.NewReader(file),
+		Body:   file,
 	}
 
 	s3Uri := filepath.Join(config.Bucket, key)
