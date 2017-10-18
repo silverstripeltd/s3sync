@@ -2,11 +2,12 @@ package main
 
 import (
 	"fmt"
-	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 	"io/ioutil"
 	"log"
 	"os"
 	"time"
+
+	"github.com/aws/aws-sdk-go/service/s3/s3iface"
 )
 
 // Logger wraps loggers for stdout, stderr and debug output
