@@ -61,6 +61,7 @@ func main() {
 		S3Service:    s3.New(sess),
 		Bucket:       s3URL.Host,
 		BucketPrefix: strings.TrimPrefix(s3URL.Path, "/"),
+		DryRun:       *dryrun,
 	}
 
 	// load all local files that doesn't match exclude
@@ -74,7 +75,7 @@ func main() {
 	files := compare(local, remote, logger)
 
 	// sync all files to s3
-	syncFiles(config, files, *dryrun, logger)
+	syncFiles(config, files, logger)
 }
 
 // compare will put a local file on the output channel if:
@@ -132,7 +133,7 @@ func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileS
 }
 
 // syncFiles takes a channel of *FileStat and tries to upload them to s3
-func syncFiles(config *Config, in chan *FileStat, dryrun bool, logger *Logger) {
+func syncFiles(config *Config, in chan *FileStat, logger *Logger) {
 
 	concurrency := 5
 	sem := make(chan bool, concurrency)
@@ -142,7 +143,7 @@ func syncFiles(config *Config, in chan *FileStat, dryrun bool, logger *Logger) {
 		// add one
 		sem <- true
 		go func(config *Config, file *FileStat, logger *Logger) {
-			err := upload(config, file, dryrun, logger)
+			err := upload(config, file, logger)
 			if err != nil {
 				logger.Err.Println(err)
 			} else {
@@ -164,7 +165,7 @@ func syncFiles(config *Config, in chan *FileStat, dryrun bool, logger *Logger) {
 	logger.Debug.Printf("Synced %d local files to remote\n", numSyncedFiles)
 }
 
-func upload(config *Config, fileStat *FileStat, dryrun bool, logger *Logger) error {
+func upload(config *Config, fileStat *FileStat, logger *Logger) error {
 
 	logger.Debug.Printf("will upload %s to s3://%s/%s\n", fileStat.Path, config.Bucket, config.BucketPrefix)
 
@@ -190,7 +191,7 @@ func upload(config *Config, fileStat *FileStat, dryrun bool, logger *Logger) err
 	}
 
 	s3Uri := filepath.Join(config.Bucket, key)
-	if dryrun {
+	if config.DryRun {
 		logger.Out.Printf("(dryrun) upload: %s to s3://%s\n", fileStat.Name, s3Uri)
 		return nil
 	}

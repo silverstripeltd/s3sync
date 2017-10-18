@@ -35,11 +35,12 @@ func NewLogger(debug, onlyShowErrors bool) *Logger {
 	return l
 }
 
-// Config contains paths and configuration for local and remote file operations
+// Config contains common paths and configuration
 type Config struct {
 	S3Service    s3iface.S3API
 	Bucket       string
 	BucketPrefix string
+	DryRun       bool
 }
 
 // A FileStat describes a local and remote file and can contain an error if the information
