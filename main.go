@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -179,21 +180,36 @@ func upload(config *Config, fileStat *FileStat, logger *Logger) error {
 		}
 	}()
 
+	contentType := "application/octet-stream"
+	// Don't try to detect content types on empty files
+	if fileStat.Size != 0 {
+		// detect the ContentType in the first 512 bytes of the file
+		magicBytes := make([]byte, 512)
+		if _, err := file.Read(magicBytes); err != nil {
+			return err
+		}
+		if _, err := file.Seek(0, 0); err != nil {
+			return err
+		}
+		contentType = http.DetectContentType(magicBytes)
+	}
+
 	key := filepath.Join(config.BucketPrefix, fileStat.Name)
 	key = strings.TrimPrefix(key, "/")
+	s3Uri := filepath.Join(config.Bucket, key)
+
+	if config.DryRun {
+		logger.Out.Printf("(dryrun) upload: %s to s3://%s\n", fileStat.Name, s3Uri)
+		return nil
+	}
 
 	// Create an uploader (can do multipart) with S3 client and default options
 	uploader := s3manager.NewUploaderWithClient(config.S3Service)
 	params := &s3manager.UploadInput{
-		Bucket: aws.String(config.Bucket),
-		Key:    aws.String(key),
-		Body:   file,
-	}
-
-	s3Uri := filepath.Join(config.Bucket, key)
-	if config.DryRun {
-		logger.Out.Printf("(dryrun) upload: %s to s3://%s\n", fileStat.Name, s3Uri)
-		return nil
+		Bucket:      aws.String(config.Bucket),
+		Key:         aws.String(key),
+		Body:        file,
+		ContentType: aws.String(contentType),
 	}
 
 	if _, err = uploader.Upload(params); err != nil {
