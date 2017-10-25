@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -61,6 +62,7 @@ func main() {
 		S3Service:    s3.New(sess),
 		Bucket:       s3URL.Host,
 		BucketPrefix: strings.TrimPrefix(s3URL.Path, "/"),
+		DryRun:       *dryrun,
 	}
 
 	// load all local files that doesn't match exclude
@@ -74,7 +76,7 @@ func main() {
 	files := compare(local, remote, logger)
 
 	// sync all files to s3
-	syncFiles(config, files, *dryrun, logger)
+	syncFiles(config, files, logger)
 }
 
 // compare will put a local file on the output channel if:
@@ -132,7 +134,7 @@ func compare(foundLocal, foundRemote chan *FileStat, logger *Logger) chan *FileS
 }
 
 // syncFiles takes a channel of *FileStat and tries to upload them to s3
-func syncFiles(config *Config, in chan *FileStat, dryrun bool, logger *Logger) {
+func syncFiles(config *Config, in chan *FileStat, logger *Logger) {
 
 	concurrency := 5
 	sem := make(chan bool, concurrency)
@@ -142,7 +144,7 @@ func syncFiles(config *Config, in chan *FileStat, dryrun bool, logger *Logger) {
 		// add one
 		sem <- true
 		go func(config *Config, file *FileStat, logger *Logger) {
-			err := upload(config, file, dryrun, logger)
+			err := upload(config, file, logger)
 			if err != nil {
 				logger.Err.Println(err)
 			} else {
@@ -164,7 +166,7 @@ func syncFiles(config *Config, in chan *FileStat, dryrun bool, logger *Logger) {
 	logger.Debug.Printf("Synced %d local files to remote\n", numSyncedFiles)
 }
 
-func upload(config *Config, fileStat *FileStat, dryrun bool, logger *Logger) error {
+func upload(config *Config, fileStat *FileStat, logger *Logger) error {
 
 	logger.Debug.Printf("will upload %s to s3://%s/%s\n", fileStat.Path, config.Bucket, config.BucketPrefix)
 
@@ -178,21 +180,36 @@ func upload(config *Config, fileStat *FileStat, dryrun bool, logger *Logger) err
 		}
 	}()
 
+	contentType := "application/octet-stream"
+	// Don't try to detect content types on empty files
+	if fileStat.Size != 0 {
+		// detect the ContentType in the first 512 bytes of the file
+		magicBytes := make([]byte, 512)
+		if _, err := file.Read(magicBytes); err != nil {
+			return err
+		}
+		if _, err := file.Seek(0, 0); err != nil {
+			return err
+		}
+		contentType = http.DetectContentType(magicBytes)
+	}
+
 	key := filepath.Join(config.BucketPrefix, fileStat.Name)
 	key = strings.TrimPrefix(key, "/")
+	s3Uri := filepath.Join(config.Bucket, key)
+
+	if config.DryRun {
+		logger.Out.Printf("(dryrun) upload: %s to s3://%s\n", fileStat.Name, s3Uri)
+		return nil
+	}
 
 	// Create an uploader (can do multipart) with S3 client and default options
 	uploader := s3manager.NewUploaderWithClient(config.S3Service)
 	params := &s3manager.UploadInput{
-		Bucket: aws.String(config.Bucket),
-		Key:    aws.String(key),
-		Body:   file,
-	}
-
-	s3Uri := filepath.Join(config.Bucket, key)
-	if dryrun {
-		logger.Out.Printf("(dryrun) upload: %s to s3://%s\n", fileStat.Name, s3Uri)
-		return nil
+		Bucket:      aws.String(config.Bucket),
+		Key:         aws.String(key),
+		Body:        file,
+		ContentType: aws.String(contentType),
 	}
 
 	if _, err = uploader.Upload(params); err != nil {
