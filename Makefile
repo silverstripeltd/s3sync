@@ -31,8 +31,6 @@ test: dev
 	golint .
 # install varcheck with `go get -u github.com/opennota/check/cmd/varcheck`
 	varcheck .
-# install with `go get -u honnef.co/go/tools/cmd/gosimple`
-	gosimple .
 
 cover: dev
 	go test -covermode=count -coverprofile=cover.out .
